@@ -1,10 +1,13 @@
-import 'dart:ui' as ui;
 import 'package:family_app/models/category.dart';
 import 'package:flutter/material.dart';
 import 'package:family_app/models/expense.dart';
 import 'package:family_app/services/expense_service.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:animations/animations.dart';
+import 'package:family_app/category_expenses_page.dart';
 
 class BalancePage extends StatefulWidget {
   const BalancePage({super.key});
@@ -30,7 +33,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
 
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'es_CL',
-    symbol: 'CLP',
+    symbol: '',
     decimalDigits: 0,
   );
 
@@ -138,11 +141,11 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   
   String _formatAmountToThousands(double amount) {
     if (amount < 1000) {
-      return _currencyFormat.format(amount);
+      return _currencyFormat.format(amount).trim();
     }
     final int thousands = (amount / 1000).round();
     final NumberFormat thousandsFormatter = NumberFormat('#,##0', 'en_US');
-    return 'CLP ${thousandsFormatter.format(thousands)}k';
+    return '${thousandsFormatter.format(thousands)}k';
   }
 
   double _calculateTotal(List<Expense> expenses) {
@@ -181,7 +184,12 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
 
     return Scaffold(
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: SpinKitRotatingPlain(
+                color: Colors.blueGrey,
+                size: 50.0,
+              ),
+            )
           : _error != null
               ? Center(
                   child: Column(
@@ -243,15 +251,106 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                         ),
                         const SizedBox(height: 10),
                         Container(
-                          height: 150,
+                          height: 200,
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: CustomPaint(
-                            painter: LineChartPainter(
-                              data: last13MonthsTotals,
-                              monthLabels: monthLabels,
-                              color: Colors.blueGrey,
-                            ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final lineBarsData = [
+                                LineChartBarData(
+                                  spots: last13MonthsTotals
+                                      .asMap()
+                                      .entries
+                                      .map((e) =>
+                                          FlSpot(e.key.toDouble(), e.value))
+                                      .toList(),
+                                  isCurved: true,
+                                  color: Colors.blueGrey,
+                                  barWidth: 3,
+                                  isStrokeCapRound: true,
+                                  dotData: const FlDotData(show: true),
+                                  belowBarData: BarAreaData(
+                                    show: true,
+                                    color: Colors.blueGrey.withOpacity(0.1),
+                                  ),
+                                ),
+                              ];
+
+                              final tooltipsOnBar = lineBarsData[0].spots.map((spot) {
+                                return ShowingTooltipIndicators([
+                                  LineBarSpot(
+                                    lineBarsData[0],
+                                    0,
+                                    spot,
+                                  ),
+                                ]);
+                              }).toList();
+
+                              return LineChart(
+                                LineChartData(
+                                  showingTooltipIndicators: tooltipsOnBar,
+                                  gridData: const FlGridData(show: false),
+                                  titlesData: FlTitlesData(
+                                    show: true,
+                                    rightTitles: const AxisTitles(
+                                      sideTitles: SideTitles(showTitles: false),
+                                    ),
+                                    topTitles: const AxisTitles(
+                                      sideTitles: SideTitles(showTitles: false),
+                                    ),
+                                    leftTitles: const AxisTitles(
+                                      sideTitles: SideTitles(showTitles: false),
+                                    ),
+                                    bottomTitles: AxisTitles(
+                                      sideTitles: SideTitles(
+                                        showTitles: true,
+                                        getTitlesWidget: (value, meta) {
+                                          final index = value.toInt();
+                                          if (index >= 0 && index < monthLabels.length) {
+                                            return Padding(
+                                              padding: const EdgeInsets.only(top: 24.0),
+                                              child: Text(
+                                                monthLabels[index],
+                                                style: const TextStyle(
+                                                  color: Colors.blueGrey,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                          return const Text('');
+                                        },
+                                        interval: 1,
+                                        reservedSize: 40,
+                                      ),
+                                    ),
+                                  ),
+                                  borderData: FlBorderData(show: false),
+                                  lineBarsData: lineBarsData,
+                                  lineTouchData: LineTouchData(
+                                    enabled: false,
+                                    touchTooltipData: LineTouchTooltipData(
+                                      getTooltipColor: (touchedSpot) => Colors.transparent,
+                                      tooltipPadding: EdgeInsets.zero,
+                                      tooltipMargin: 8,
+                                      getTooltipItems: (touchedSpots) {
+                                        return touchedSpots.map((LineBarSpot touchedSpot) {
+                                          return LineTooltipItem(
+                                            _formatAmountToThousands(touchedSpot.y),
+                                            const TextStyle(
+                                              color: Colors.blueGrey,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 10,
+                                            ),
+                                          );
+                                        }).toList();
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(height: 40),
@@ -274,6 +373,10 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
         return Colors.orange[200]!;
       case 'education':
         return Colors.purple[200]!;
+      case 'leisure':
+        return Colors.teal[200]!;
+      case 'uber eats':
+        return Colors.yellow[400]!;
       case 'others':
         return Colors.blueGrey[300]!;
       default:
@@ -299,8 +402,27 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
       bars.add(
         Expanded(
           flex: percentage.toInt(),
-          child: GestureDetector(
-            onTap: () async {
+          child: OpenContainer<Object>(
+            closedElevation: 0,
+            closedColor: _getCategoryColor(category),
+            openColor: _getCategoryColor(category),
+            middleColor: _getCategoryColor(category),
+            closedShape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.zero,
+            ),
+            openElevation: 0,
+            transitionDuration: const Duration(milliseconds: 500),
+            closedBuilder: (context, action) => Container(
+              color: _getCategoryColor(category),
+              child: Center(
+                child: Text(
+                  '$category\n${_formatAmountToThousands(amount)}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ),
+            ),
+            openBuilder: (context, action) {
               List<Expense> filtered;
               if (category == 'Others') {
                 // Get the top 3 category names to identify which ones are "Others"
@@ -325,24 +447,18 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                     .where((e) => e.category.name == category)
                     .toList();
               }
-              final result = await context.push('/category-details', extra: {
-                'categoryName': category,
-                'expenses': filtered,
-              });
+              return CategoryExpensesPage(
+                categoryName: category,
+                expenses: filtered,
+                backgroundColor: _getCategoryColor(category),
+                onClose: action,
+              );
+            },
+            onClosed: (result) {
               if (result == true) {
                 fetchExpenses(refresh: true);
               }
             },
-            child: Container(
-              color: _getCategoryColor(category),
-              child: Center(
-                child: Text(
-                  '$category\n${_formatAmountToThousands(amount)}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 10),
-                ),
-              ),
-            ),
           ),
         ),
       );
@@ -355,7 +471,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
           height: 50,
           margin: const EdgeInsets.symmetric(horizontal: 16.0),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(8.0),
+            borderRadius: BorderRadius.zero,
             child: Row(
               children: bars,
             ),
@@ -514,10 +630,10 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                         ? null
                         : () => _handlePayout(debtor!, creditor!, amountOwed),
                     icon: _isAddingPayout
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2))
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: SpinKitSpinningLines(color: Colors.blueGrey, size: 20))
                         : const Icon(Icons.compare_arrows, size: 18),
                     label: const Text('Register Payout', style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
@@ -534,128 +650,4 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
       ),
     );
   }
-}
-
-class LineChartPainter extends CustomPainter {
-  final List<double> data;
-  final List<String> monthLabels;
-  final Color color;
-
-  LineChartPainter({
-    required this.data,
-    required this.monthLabels,
-    required this.color,
-  });
-
-  String _formatValue(double value) {
-    if (value == 0) return '0';
-    final formatter = NumberFormat('#,###', 'es_CL');
-    if (value < 1000) return formatter.format(value);
-    return '${formatter.format((value / 1000).round())}k';
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return;
-
-    // Add vertical padding for labels
-    const double topPadding = 20.0;
-    const double bottomPadding = 30.0; // Increased for month labels
-    final double chartHeight = size.height - topPadding - bottomPadding;
-
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final fillPaint = Paint()
-      ..color = color.withOpacity(0.1)
-      ..style = PaintingStyle.fill;
-
-    double maxVal = data.reduce((a, b) => a > b ? a : b);
-    if (maxVal == 0) maxVal = 1.0;
-
-    final double widthInterval = size.width / (data.length - 1);
-    
-    final path = Path();
-    final fillPath = Path();
-
-    for (int i = 0; i < data.length; i++) {
-      double x = i * widthInterval;
-      double y = topPadding + (chartHeight - (data[i] / maxVal * chartHeight));
-
-      if (i == 0) {
-        path.moveTo(x, y);
-        fillPath.moveTo(x, size.height - bottomPadding + 10);
-        fillPath.lineTo(x, y);
-      } else {
-        path.lineTo(x, y);
-        fillPath.lineTo(x, y);
-      }
-      
-      if (i == data.length - 1) {
-        fillPath.lineTo(x, size.height - bottomPadding + 10);
-        fillPath.close();
-      }
-    }
-
-    canvas.drawPath(fillPath, fillPaint);
-    canvas.drawPath(path, paint);
-
-    // Draw points and labels
-    final pointPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    for (int i = 0; i < data.length; i++) {
-      double x = i * widthInterval;
-      double y = topPadding + (chartHeight - (data[i] / maxVal * chartHeight));
-      
-      // Draw dot
-      canvas.drawCircle(Offset(x, y), 3.0, pointPaint);
-
-      // Draw value label
-      final valuePainter = TextPainter(
-        text: TextSpan(
-          text: _formatValue(data[i]),
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        textDirection: ui.TextDirection.ltr,
-      );
-      valuePainter.layout();
-      
-      valuePainter.paint(
-        canvas,
-        Offset(x - (valuePainter.width / 2), y - valuePainter.height - 4),
-      );
-
-      // Draw month label
-      if (i < monthLabels.length) {
-        final monthPainter = TextPainter(
-          text: TextSpan(
-            text: monthLabels[i],
-            style: TextStyle(
-              color: color.withOpacity(0.7),
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          textDirection: ui.TextDirection.ltr,
-        );
-        monthPainter.layout();
-        monthPainter.paint(
-          canvas,
-          Offset(x - (monthPainter.width / 2), size.height - 15),
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

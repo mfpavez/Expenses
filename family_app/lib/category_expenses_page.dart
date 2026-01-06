@@ -3,15 +3,22 @@ import 'package:family_app/services/expense_service.dart';
 import 'package:flutter/material.dart';
 import 'package:family_app/models/expense.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:go_router/go_router.dart';
 
 class CategoryExpensesPage extends StatefulWidget {
   final String categoryName;
   final List<Expense> expenses;
+  final Color backgroundColor;
+  final void Function({dynamic returnValue})? onClose;
 
   const CategoryExpensesPage({
     super.key,
     required this.categoryName,
     required this.expenses,
+    required this.backgroundColor,
+    this.onClose,
   });
 
   @override
@@ -27,6 +34,25 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
   void initState() {
     super.initState();
     _currentExpenses = List.from(widget.expenses);
+  }
+
+  Color _getCategoryColor(String category) {
+    switch (category.toLowerCase()) {
+      case 'supermarket':
+        return Colors.pink[200]!;
+      case 'house bills':
+        return Colors.blue[200]!;
+      case 'credito':
+        return Colors.green[200]!;
+      case 'contribuciones':
+        return Colors.orange[200]!;
+      case 'education':
+        return Colors.purple[200]!;
+      case 'others':
+        return Colors.blueGrey[300]!;
+      default:
+        return Colors.grey[400]!;
+    }
   }
 
   Future<void> _showEditExpenseDialog(Expense expense) async {
@@ -167,7 +193,11 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
                             // Since we changed something, we should probably pop 
                             // because the expense might not belong here anymore 
                             // (if category changed) or just to refresh everything.
-                            Navigator.of(this.context).pop(true); 
+                            if (widget.onClose != null) {
+                              widget.onClose!(returnValue: true);
+                            } else {
+                              Navigator.of(this.context).pop(true);
+                            }
                             
                             ScaffoldMessenger.of(this.context).showSnackBar(
                               const SnackBar(
@@ -190,9 +220,9 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          child: SpinKitSpinningLines(
+                            color: Colors.white,
+                            size: 20,
                           ),
                         )
                       : const Text('Save'),
@@ -209,60 +239,176 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
   Widget build(BuildContext context) {
     final NumberFormat currencyFormat = NumberFormat.currency(
       locale: 'es_CL',
-      symbol: 'CLP',
+      symbol: '',
       decimalDigits: 0,
     );
 
-    return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop && _wasChanged && result == null) {
-          // This ensures if they use back button we still signal change if any happened before
-          // However, my save logic already pops with true.
-        }
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('${widget.categoryName} Expenses'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(_wasChanged),
-          ),
+    return Scaffold(
+      backgroundColor: widget.backgroundColor,
+      appBar: AppBar(
+        title: Text('${widget.categoryName} Expenses'),
+        backgroundColor: widget.backgroundColor,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () {
+            if (widget.onClose != null) {
+              widget.onClose!(returnValue: _wasChanged);
+            } else {
+              Navigator.of(context).pop(_wasChanged);
+            }
+          },
         ),
-        body: _currentExpenses.isEmpty
-            ? const Center(child: Text('No expenses found for this category.'))
-            : ListView.builder(
-                itemCount: _currentExpenses.length,
-                itemBuilder: (context, index) {
-                  final expense = _currentExpenses[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16.0,
-                      vertical: 4.0,
+      ),
+      body: _currentExpenses.isEmpty
+          ? const Center(child: Text('No expenses found for this category.'))
+          : ListView.builder(
+              itemCount: _currentExpenses.length,
+              itemBuilder: (context, index) {
+                final expense = _currentExpenses[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 4.0,
+                  ),
+                  elevation: 2.0,
+                  child: Slidable(
+                    startActionPane: ActionPane(
+                      motion: const ScrollMotion(),
+                      children: [
+                        SlidableAction(
+                          onPressed: (context) => _showEditExpenseDialog(expense),
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          icon: Icons.edit,
+                          label: 'Edit',
+                        ),
+                      ],
                     ),
-                    elevation: 2.0,
-                    child: ListTile(
-                      onTap: () => _showEditExpenseDialog(expense),
-                      leading: CircleAvatar(
-                        radius: 15,
-                        child: Text(expense.paidBy[0]),
-                      ),
-                      title: Text(expense.item.toUpperCase()),
-                      subtitle: Text(
-                        '${DateFormat('MM/dd/yy').format(expense.date)} - Paid by ${expense.paidBy}',
-                      ),
-                      trailing: Text(
-                        currencyFormat.format(expense.amount),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                                          endActionPane: ActionPane(
+                                            motion: const ScrollMotion(),
+                                            children: [
+                                              SlidableAction(
+                                                onPressed: (context) async {
+                                                  final bool? shouldDelete = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (BuildContext context) {
+                                                      return AlertDialog(
+                                                        title: const Text('Confirm Deletion'),
+                                                        content: Text(
+                                                            'Are you sure you want to delete "${expense.item}"?'),
+                                                        actions: <Widget>[
+                                                          TextButton(
+                                                            onPressed: () =>
+                                                                Navigator.of(context).pop(false),
+                                                            child: const Text('Cancel'),
+                                                          ),
+                                                          TextButton(
+                                                            onPressed: () =>
+                                                                Navigator.of(context).pop(true),
+                                                            child: const Text('Delete'),
+                                                          ),
+                                                        ],
+                                                      );
+                                                    },
+                                                  );
+                    
+                                                  if (shouldDelete == true && expense.rowNumber != null) {
+                                                    // Show loading dialog
+                                                    if (!mounted) return;
+                                                    showDialog(
+                                                      context: context,
+                                                      barrierDismissible: false,
+                                                      builder: (BuildContext context) {
+                                                        return const AlertDialog(
+                                                          content: Row(
+                                                            children: [
+                                                              SizedBox(
+                                                                height: 20,
+                                                                width: 20,
+                                                                child: SpinKitSpinningLines(
+                                                                  color: Colors.blueGrey,
+                                                                  size: 20,
+                                                                ),
+                                                              ),
+                                                              SizedBox(width: 20),
+                                                              Text('Deleting...'),
+                                                            ],
+                                                          ),
+                                                        );
+                                                      },
+                                                    );
+                    
+                                                    try {
+                                                      await _expenseService
+                                                          .removeExpense(expense.rowNumber!);
+                                                      
+                                                      if (!mounted) return;
+                                                      Navigator.of(context).pop(); // Close loading dialog
+                    
+                                                      setState(() {
+                                                        _currentExpenses.removeAt(index);
+                                                        _wasChanged = true;
+                                                      });
+                                                      
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        SnackBar(
+                                                            content: Text(
+                                                                'Expense "${expense.item}" removed.')),
+                                                      );
+                                                    } catch (e) {
+                                                      if (!mounted) return;
+                                                      Navigator.of(context).pop(); // Close loading dialog
+                                                      
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        SnackBar(
+                                                            content: Text(
+                                                                'Failed to remove expense: $e')),
+                                                      );
+                                                    }
+                                                  }
+                                                },
+                                                backgroundColor: Colors.red,
+                                                foregroundColor: Colors.white,
+                                                icon: Icons.delete,
+                                                label: 'Delete',
+                                              ),
+                                            ],
+                                          ),                      child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 15,
+                          child: Text(expense.paidBy[0]),
+                        ),
+                        title: Text(expense.item.toUpperCase()),
+                        subtitle: Text(
+                          '${DateFormat('MM/dd/yy').format(expense.date)} - Paid by ${expense.paidBy}',
+                        ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              currencyFormat.format(expense.amount),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Text(
+                              expense.category.name,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: _getCategoryColor(expense.category.name),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
-      ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }

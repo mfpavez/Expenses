@@ -4,6 +4,11 @@ import 'package:family_app/models/expense.dart';
 import 'package:family_app/services/expense_service.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:animations/animations.dart';
+import 'package:family_app/category_expenses_page.dart';
+import 'package:family_app/add_expense_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,18 +32,9 @@ class HomePageState extends State<HomePage>
 
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'es_CL',
-    symbol: 'CLP',
+    symbol: '',
     decimalDigits: 0,
   );
-
-  final GlobalKey<FormState> _addExpenseFormKey = GlobalKey<FormState>();
-  final TextEditingController _itemController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
-  String? _selectedPaidBy = 'Manuel';
-  DateTime _selectedDate = DateTime.now();
-  Category _selectedCategory = Category.undefined;
-
-
 
   // For highlighting newly added expense
   String? _lastAddedExpenseItem;
@@ -146,8 +142,6 @@ class HomePageState extends State<HomePage>
 
   @override
   void dispose() {
-    _itemController.dispose();
-    _amountController.dispose();
     _highlightAnimationController.dispose(); 
     super.dispose();
   }
@@ -307,10 +301,9 @@ class HomePageState extends State<HomePage>
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          child: SpinKitSpinningLines(
+                            color: Colors.white,
+                            size: 20,
                           ),
                         )
                       : const Text('Save'),
@@ -323,198 +316,7 @@ class HomePageState extends State<HomePage>
     );
   }
 
-  Future<void> _showAddExpenseDialog(BuildContext context) async {
-    _itemController.clear();
-    _amountController.clear();
-    _selectedPaidBy = 'Manuel';
-    _selectedDate = DateTime.now(); 
-    bool isAddingExpense = false;
 
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            return AlertDialog(
-              title: const Text('Add New Expense'),
-              content: Form(
-                key: _addExpenseFormKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: _itemController,
-                        decoration: const InputDecoration(labelText: 'Item'),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter an item';
-                          }
-                          return null;
-                        },
-                      ),
-                      TextFormField(
-                        controller: _amountController,
-                        decoration: const InputDecoration(labelText: 'Amount'),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter an amount';
-                          }
-                          if (double.tryParse(value) == null) {
-                            return 'Please enter a valid number';
-                          }
-                          return null;
-                        },
-                      ),
-                      const Text('Paid By:', style: TextStyle(fontSize: 14)),
-                      const SizedBox(height: 4),
-                      SegmentedButton<String>(
-                        segments: const <ButtonSegment<String>>[
-                          ButtonSegment<String>(
-                            value: 'Manuel',
-                            label: Text('Manuel'),
-                          ),
-                          ButtonSegment<String>(
-                            value: 'Tamara',
-                            label: Text('Tamara'),
-                          ),
-                        ],
-                        selected: {_selectedPaidBy ?? 'Manuel'},
-                        onSelectionChanged: (Set<String> newSelection) {
-                          setState(() {
-                            _selectedPaidBy = newSelection.first;
-                            _addExpenseFormKey.currentState!
-                                .validate(); 
-                          });
-                        },
-                        emptySelectionAllowed: false,
-                        multiSelectionEnabled: false,
-                      ),
-                      if (_selectedPaidBy == null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            'Please select who paid',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      DropdownButtonFormField<Category>(
-                        value: _selectedCategory,
-                        items: Category.values.map((Category category) {
-                          return DropdownMenuItem<Category>(
-                            value: category,
-                            child: Text(category.name),
-                          );
-                        }).toList(),
-                        onChanged: (Category? newValue) {
-                          setState(() {
-                            _selectedCategory = newValue!;
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Category',
-                        ),
-                      ),
-                      ListTile(
-                        title: Text(
-                          'Date: ${DateFormat('MM/dd/yy').format(_selectedDate)}',
-                        ),
-                        trailing: const Icon(Icons.calendar_today),
-                        onTap: () async {
-                          final DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: _selectedDate,
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2101),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              _selectedDate = picked;
-                            });
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: isAddingExpense
-                      ? null
-                      : () async {
-                          if (_addExpenseFormKey.currentState!.validate()) {
-                            setState(() {
-                              isAddingExpense = true;
-                            });
-                            try {
-                              await _expenseService.addExpense(
-                                _itemController.text,
-                                _selectedPaidBy!,
-                                double.parse(_amountController.text),
-                                _selectedDate,
-                                _selectedCategory.name,
-                              );
-
-                              fetchCurrentMonthExpenses(refreshCache: true);
-                              
-                              // Set for highlighting
-                              _lastAddedExpenseItem = _itemController.text;
-                              _lastAddedExpenseDate = _selectedDate;
-                              _highlightAnimationController.forward(from: 0.0);
-
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Expense added successfully!'),
-                                ),
-                              );
-                              Navigator.of(context)
-                                  .pop(); 
-                            } catch (e) {
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content: Text('Failed to add expense: $e')),
-                              );
-                            } finally {
-                              if (mounted) {
-                                setState(() {
-                                  isAddingExpense = false;
-                                });
-                              }
-                            }
-                          }
-                        },
-                  child: isAddingExpense
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 
   Widget _buildCategoryFilter() {
     List<DropdownMenuItem<Category?>> items = [
@@ -559,7 +361,7 @@ class HomePageState extends State<HomePage>
 
     return Scaffold(
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: SpinKitRotatingPlain(color: Colors.blueGrey, size: 50.0))
           : _errorMessage != null
           ? Center(
               child: Padding(
@@ -627,101 +429,154 @@ class HomePageState extends State<HomePage>
                                       borderRadius: BorderRadius.circular(8.0),
                                     )
                                   : null,
-                              child: ListTile(
-                                onLongPress: expense.rowNumber == null
-                                    ? null
-                                    : () async {
-                                        final bool? shouldDelete =
-                                            await showDialog<bool>(
-                                          context: context,
-                                          builder: (BuildContext context) {
-                                            return AlertDialog(
-                                              title:
-                                                  const Text('Confirm Deletion'),
-                                              content: Text(
-                                                  'Are you sure you want to delete "${expense.item}"?'),
-                                              actions: <Widget>[
-                                                TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.of(context)
-                                                          .pop(false),
-                                                  child: const Text('Cancel'),
-                                                ),
-                                                TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.of(context)
-                                                          .pop(true),
-                                                  child: const Text('Delete'),
-                                                ),
-                                              ],
-                                            );
-                                          },
-                                        );
-
-                                        if (shouldDelete == true) {
-                                          try {
-                                            await _expenseService
-                                                .removeExpense(
-                                                    expense.rowNumber!);
-                                            if (!mounted) return;
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              SnackBar(
-                                                  content: Text(
-                                                      'Expense "${expense.item}" removed.')),
-                                            );
-                                            fetchCurrentMonthExpenses(refreshCache: true);
-                                          } catch (e) {
-                                            if (!mounted) return;
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              SnackBar(
-                                                  content: Text(
-                                                      'Failed to remove expense: $e')),
-                                            );
-                                          }
-                                        }
-                                      },
-                                onTap: () => _showEditExpenseDialog(expense),
-                                leading: CircleAvatar(
-                                  radius: 15,
-                                  backgroundColor: Colors.blueGrey.withOpacity(0.5),
-                                  child: Text(
-                                    expense.paidBy[0],
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                title: Text(expense.item.toUpperCase()),
-                                subtitle: Text(
-                                  expense.date.year == 2020
-                                      ? 'Date Missing - Tap to Add'
-                                      : '${DateFormat('MM/dd/yy').format(expense.date)} - Paid by ${expense.paidBy}',
-                                  style: expense.date.year == 2020
-                                      ? const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        )
-                                      : null,
-                                ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                              child: Slidable(
+                                startActionPane: ActionPane(
+                                  motion: const ScrollMotion(),
                                   children: [
-                                    Text(
-                                      _currencyFormat.format(expense.amount),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    Text(
-                                      expense.category.name,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: _getCategoryColor(expense.category.name),
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    SlidableAction(
+                                      onPressed: (context) => _showEditExpenseDialog(expense),
+                                      backgroundColor: Colors.blue,
+                                      foregroundColor: Colors.white,
+                                      icon: Icons.edit,
+                                      label: 'Edit',
                                     ),
                                   ],
+                                ),
+                                endActionPane: ActionPane(
+                                  motion: const ScrollMotion(),
+                                  children: [
+                                    if (expense.rowNumber != null)
+                                      SlidableAction(
+                                        onPressed: (context) async {
+                                          final bool? shouldDelete =
+                                              await showDialog<bool>(
+                                            context: context,
+                                            builder: (BuildContext context) {
+                                              return AlertDialog(
+                                                title:
+                                                    const Text('Confirm Deletion'),
+                                                content: Text(
+                                                    'Are you sure you want to delete "${expense.item}"?'),
+                                                actions: <Widget>[
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(context)
+                                                            .pop(false),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(context)
+                                                            .pop(true),
+                                                    child: const Text('Delete'),
+                                                  ),
+                                                ],
+                                              );
+                                            },
+                                          );
+
+                                          if (shouldDelete == true) {
+                                            // Show loading dialog
+                                            if (!mounted) return;
+                                            showDialog(
+                                              context: context,
+                                              barrierDismissible: false,
+                                              builder: (BuildContext context) {
+                                                return const AlertDialog(
+                                                  content: Row(
+                                                    children: [
+                                                      SizedBox(
+                                                        height: 20,
+                                                        width: 20,
+                                                        child: SpinKitSpinningLines(
+                                                          color: Colors.blueGrey,
+                                                          size: 20,
+                                                        ),
+                                                      ),
+                                                      SizedBox(width: 20),
+                                                      Text('Deleting...'),
+                                                    ],
+                                                  ),
+                                                );
+                                              },
+                                            );
+
+                                            try {
+                                              await _expenseService
+                                                  .removeExpense(
+                                                      expense.rowNumber!);
+                                              
+                                              if (!mounted) return;
+                                              Navigator.of(context).pop(); // Close loading dialog
+
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                SnackBar(
+                                                    content: Text(
+                                                        'Expense "${expense.item}" removed.')),
+                                              );
+                                              fetchCurrentMonthExpenses(refreshCache: true);
+                                            } catch (e) {
+                                              if (!mounted) return;
+                                              Navigator.of(context).pop(); // Close loading dialog
+                                              
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                SnackBar(
+                                                    content: Text(
+                                                        'Failed to remove expense: $e')),
+                                              );
+                                            }
+                                          }
+                                        },
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        icon: Icons.delete,
+                                        label: 'Delete',
+                                      ),
+                                  ],
+                                ),
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    radius: 15,
+                                    backgroundColor: Colors.blueGrey.withOpacity(0.5),
+                                    child: Text(
+                                      expense.paidBy[0],
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                  title: Text(expense.item.toUpperCase()),
+                                  subtitle: Text(
+                                    expense.date.year == 2020
+                                        ? 'Date Missing - Tap to Add'
+                                        : '${DateFormat('MM/dd/yy').format(expense.date)} - Paid by ${expense.paidBy}',
+                                    style: expense.date.year == 2020
+                                        ? const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          )
+                                        : null,
+                                  ),
+                                  trailing: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        _currencyFormat.format(expense.amount),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      Text(
+                                        expense.category.name,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: _getCategoryColor(expense.category.name),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
@@ -746,7 +601,45 @@ class HomePageState extends State<HomePage>
               ],
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddExpenseDialog(context),
+        onPressed: () async {
+          final result = await Navigator.of(context).push(
+            PageRouteBuilder(
+              opaque: false,
+              barrierDismissible: true,
+              barrierColor: Colors.black.withOpacity(0.5),
+              transitionDuration: const Duration(milliseconds: 300),
+              reverseTransitionDuration: const Duration(milliseconds: 200),
+              pageBuilder: (context, animation, secondaryAnimation) => const AddExpensePage(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutBack,
+                    ),
+                    child: child,
+                  ),
+                );
+              },
+            ),
+          );
+
+          if (result is Map) {
+            setState(() {
+              _lastAddedExpenseItem = result['item'];
+              _lastAddedExpenseDate = result['date'];
+            });
+            _highlightAnimationController.forward(from: 0.0);
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Expense added successfully!'),
+              ),
+            );
+            fetchCurrentMonthExpenses(refreshCache: true);
+          }
+        },
         child: const Icon(Icons.add),
       ),
 
@@ -801,6 +694,10 @@ class HomePageState extends State<HomePage>
         return Colors.orange[200]!;
       case 'education':
         return Colors.purple[200]!;
+      case 'leisure':
+        return Colors.teal[200]!;
+      case 'uber eats':
+        return Colors.yellow[400]!;
       case 'others':
         return Colors.blueGrey[300]!;
       default:
@@ -825,8 +722,27 @@ class HomePageState extends State<HomePage>
       bars.add(
         Expanded(
           flex: percentage.toInt(),
-          child: GestureDetector(
-            onTap: () async {
+          child: OpenContainer<Object>(
+            closedElevation: 0,
+            closedColor: _getCategoryColor(category),
+            openColor: _getCategoryColor(category),
+            middleColor: _getCategoryColor(category),
+            closedShape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.zero,
+            ),
+            openElevation: 0,
+            transitionDuration: const Duration(milliseconds: 500),
+            closedBuilder: (context, action) => Container(
+              color: _getCategoryColor(category),
+              child: Center(
+                child: Text(
+                  '$category\n${_formatAmountToThousands(amount)}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ),
+            ),
+            openBuilder: (context, action) {
               List<Expense> filtered;
               if (category == 'Others') {
                 // Get the top 3 category names to identify which ones are "Others"
@@ -851,24 +767,18 @@ class HomePageState extends State<HomePage>
                     .where((e) => e.category.name == category)
                     .toList();
               }
-              final result = await context.push('/category-details', extra: {
-                'categoryName': category,
-                'expenses': filtered,
-              });
+              return CategoryExpensesPage(
+                categoryName: category,
+                expenses: filtered,
+                backgroundColor: _getCategoryColor(category),
+                onClose: action,
+              );
+            },
+            onClosed: (result) {
               if (result == true) {
                 fetchCurrentMonthExpenses(refreshCache: true);
               }
             },
-            child: Container(
-              color: _getCategoryColor(category),
-              child: Center(
-                child: Text(
-                  '${category}\n${_formatAmountToThousands(amount)}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 10),
-                ),
-              ),
-            ),
           ),
         ),
       );
@@ -888,7 +798,7 @@ class HomePageState extends State<HomePage>
           height: 50,
           margin: const EdgeInsets.symmetric(horizontal: 16.0),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(8.0),
+            borderRadius: BorderRadius.zero,
             child: Row(
               children: bars,
             ),
@@ -900,11 +810,11 @@ class HomePageState extends State<HomePage>
 
   String _formatAmountToThousands(double amount) {
     if (amount < 1000) {
-      return _currencyFormat.format(amount);
+      return _currencyFormat.format(amount).trim();
     }
     final int thousands = (amount / 1000).round();
     final NumberFormat thousandsFormatter = NumberFormat('#,##0', 'en_US');
-    return 'CLP ${thousandsFormatter.format(thousands)}k';
+    return '${thousandsFormatter.format(thousands)}k';
   }
 
   Widget _buildSummaryCards() {

@@ -21,9 +21,11 @@ final _router = GoRouter(
         final extra = state.extra as Map<String, dynamic>;
         final categoryName = extra['categoryName'] as String;
         final expenses = extra['expenses'] as List<Expense>;
+        final backgroundColor = extra['backgroundColor'] as Color? ?? Colors.white;
         return CategoryExpensesPage(
           categoryName: categoryName,
           expenses: expenses,
+          backgroundColor: backgroundColor,
         );
       },
     ),

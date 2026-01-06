@@ -5,6 +5,8 @@ enum Category {
   credito,
   contribuciones,
   education,
+  leisure,
+  uberEats,
 }
 
 extension CategoryExtension on Category {
@@ -20,6 +22,10 @@ extension CategoryExtension on Category {
         return 'Contribuciones';
       case Category.education:
         return 'Education';
+      case Category.leisure:
+        return 'Leisure';
+      case Category.uberEats:
+        return 'Uber Eats';
       case Category.undefined:
       default:
         return 'Undefined';
@@ -42,6 +48,10 @@ Category categoryFromString(String? categoryString) {
       return Category.contribuciones;
     case 'education':
       return Category.education;
+    case 'leisure':
+      return Category.leisure;
+    case 'uber eats':
+      return Category.uberEats;
     default:
       return Category.undefined;
   }
