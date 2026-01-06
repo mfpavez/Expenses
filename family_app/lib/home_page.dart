@@ -36,12 +36,6 @@ class HomePageState extends State<HomePage>
     decimalDigits: 0,
   );
 
-  // For highlighting newly added expense
-  String? _lastAddedExpenseItem;
-  DateTime? _lastAddedExpenseDate;
-  late AnimationController _highlightAnimationController;
-  late Animation<Color?> _highlightAnimation;
-
   @override
   void initState() {
     super.initState();
@@ -49,26 +43,6 @@ class HomePageState extends State<HomePage>
       _currentMonth = DateFormat('MMMM').format(DateTime.now());
       fetchCurrentMonthExpenses(refreshCache: false);
     }
-    _highlightAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _highlightAnimation =
-        ColorTween(begin: Colors.transparent, end: Colors.yellow[100]).animate(
-          CurvedAnimation(
-            parent: _highlightAnimationController,
-            curve: Curves.easeIn,
-          ),
-        );
-    _highlightAnimationController.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        setState(() {
-          _lastAddedExpenseItem = null;
-          _lastAddedExpenseDate = null;
-        });
-        _highlightAnimationController.reset();
-      }
-    });
   }
 
   bool _isX2Expense(Expense expense) {
@@ -140,11 +114,7 @@ class HomePageState extends State<HomePage>
   double _getExpensesPaidByDisplay(String person) =>
       _getNonX2ExpensesPaidBy(person);
 
-  @override
-  void dispose() {
-    _highlightAnimationController.dispose(); 
-    super.dispose();
-  }
+
 
   Future<void> _showEditExpenseDialog(Expense expense) async {
     Category selectedCategory = expense.category;
@@ -361,7 +331,7 @@ class HomePageState extends State<HomePage>
 
     return Scaffold(
       body: _isLoading
-          ? const Center(child: SpinKitRotatingPlain(color: Colors.blueGrey, size: 50.0))
+          ? Center(child: SpinKitRotatingPlain(color: Theme.of(context).colorScheme.primary, size: 50.0))
           : _errorMessage != null
           ? Center(
               child: Padding(
@@ -369,7 +339,7 @@ class HomePageState extends State<HomePage>
                 child: Text(
                   'Error: $_errorMessage',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.red, fontSize: 16),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 16),
                 ),
               ),
             )
@@ -399,14 +369,6 @@ class HomePageState extends State<HomePage>
                           itemCount: filteredExpenses.length,
                           itemBuilder: (context, index) {
                             final expense = filteredExpenses[index];
-                            final bool isNewlyAdded =
-                                _lastAddedExpenseItem == expense.item &&
-                                _lastAddedExpenseDate?.day ==
-                                    expense.date.day &&
-                                _lastAddedExpenseDate?.month ==
-                                    expense.date.month &&
-                                _lastAddedExpenseDate?.year ==
-                                    expense.date.year;
 
                             Widget expenseCard = Card(
                               margin: const EdgeInsets.symmetric(
@@ -416,7 +378,7 @@ class HomePageState extends State<HomePage>
                               elevation:
                                   2.0,
                               color: expense.date.year == 2020
-                                  ? Colors.red[100]
+                                  ? Theme.of(context).colorScheme.errorContainer
                                   : null,
                               shape: expense.date.year == 2020
                                   ? RoundedRectangleBorder(
@@ -435,8 +397,8 @@ class HomePageState extends State<HomePage>
                                   children: [
                                     SlidableAction(
                                       onPressed: (context) => _showEditExpenseDialog(expense),
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
+                                      backgroundColor: Theme.of(context).colorScheme.primary,
+                                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                                       icon: Icons.edit,
                                       label: 'Edit',
                                     ),
@@ -447,7 +409,7 @@ class HomePageState extends State<HomePage>
                                   children: [
                                     if (expense.rowNumber != null)
                                       SlidableAction(
-                                        onPressed: (context) async {
+                                        onPressed: (actionContext) async {
                                           final bool? shouldDelete =
                                               await showDialog<bool>(
                                             context: context,
@@ -482,19 +444,19 @@ class HomePageState extends State<HomePage>
                                               context: context,
                                               barrierDismissible: false,
                                               builder: (BuildContext context) {
-                                                return const AlertDialog(
+                                                return AlertDialog(
                                                   content: Row(
                                                     children: [
                                                       SizedBox(
                                                         height: 20,
                                                         width: 20,
                                                         child: SpinKitSpinningLines(
-                                                          color: Colors.blueGrey,
+                                                          color: Theme.of(context).colorScheme.primary,
                                                           size: 20,
                                                         ),
                                                       ),
-                                                      SizedBox(width: 20),
-                                                      Text('Deleting...'),
+                                                      const SizedBox(width: 20),
+                                                      const Text('Deleting...'),
                                                     ],
                                                   ),
                                                 );
@@ -529,8 +491,8 @@ class HomePageState extends State<HomePage>
                                             }
                                           }
                                         },
-                                        backgroundColor: Colors.red,
-                                        foregroundColor: Colors.white,
+                                        backgroundColor: Theme.of(context).colorScheme.error,
+                                        foregroundColor: Theme.of(context).colorScheme.onError,
                                         icon: Icons.delete,
                                         label: 'Delete',
                                       ),
@@ -539,10 +501,10 @@ class HomePageState extends State<HomePage>
                                 child: ListTile(
                                   leading: CircleAvatar(
                                     radius: 15,
-                                    backgroundColor: Colors.blueGrey.withOpacity(0.5),
+                                    backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
                                     child: Text(
                                       expense.paidBy[0],
-                                      style: const TextStyle(color: Colors.white),
+                                      style: TextStyle(color: Theme.of(context).colorScheme.onSecondaryContainer),
                                     ),
                                   ),
                                   title: Text(expense.item.toUpperCase()),
@@ -571,7 +533,7 @@ class HomePageState extends State<HomePage>
                                         expense.category.name,
                                         style: TextStyle(
                                           fontSize: 10,
-                                          color: _getCategoryColor(expense.category.name),
+                                          color: expense.category.color,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
@@ -581,26 +543,15 @@ class HomePageState extends State<HomePage>
                               ),
                             );
 
-                            if (isNewlyAdded) {
-                              return AnimatedBuilder(
-                                animation: _highlightAnimation,
-                                builder: (context, child) {
-                                  return Container(
-                                    color: _highlightAnimation.value,
-                                    child: child,
-                                  );
-                                },
-                                child: expenseCard,
-                              );
-                            } else {
-                              return expenseCard;
-                            }
+                            return expenseCard;
                           },
                         ),
                 ),
               ],
             ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: Theme.of(context).colorScheme.secondary,
+        foregroundColor: Theme.of(context).colorScheme.onSecondary,
         onPressed: () async {
           final result = await Navigator.of(context).push(
             PageRouteBuilder(
@@ -626,11 +577,6 @@ class HomePageState extends State<HomePage>
           );
 
           if (result is Map) {
-            setState(() {
-              _lastAddedExpenseItem = result['item'];
-              _lastAddedExpenseDate = result['date'];
-            });
-            _highlightAnimationController.forward(from: 0.0);
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -682,27 +628,19 @@ class HomePageState extends State<HomePage>
     return summary;
   }
 
-  Color _getCategoryColor(String category) {
-    switch (category.toLowerCase()) {
-      case 'supermarket':
-        return Colors.pink[200]!;
-      case 'house bills':
-        return Colors.blue[200]!;
-      case 'credito':
-        return Colors.green[200]!;
-      case 'contribuciones':
-        return Colors.orange[200]!;
-      case 'education':
-        return Colors.purple[200]!;
-      case 'leisure':
-        return Colors.teal[200]!;
-      case 'uber eats':
-        return Colors.yellow[400]!;
-      case 'others':
-        return Colors.blueGrey[300]!;
-      default:
-        return Colors.grey[400]!;
+  Color _getCategoryColor(dynamic category) {
+    if (category is Category) {
+      return category.color;
+    } else if (category is String) {
+       // Handle 'Others' or string lookups
+       if (category == 'Others') return const Color(0xFF607D8B); // Blue Grey
+       try {
+         return categoryFromString(category).color;
+       } catch (_) {
+         return const Color(0xFF9E9E9E);
+       }
     }
+    return const Color(0xFF9E9E9E);
   }
 
   Widget _buildCategorySummaryChart(List<Expense> expenses) {
@@ -717,34 +655,36 @@ class HomePageState extends State<HomePage>
     }
 
     List<Widget> bars = [];
-    categorySummary.forEach((category, amount) {
+    categorySummary.forEach((categoryName, amount) {
       final percentage = (amount / total) * 100;
+      final color = _getCategoryColor(categoryName == 'Others' ? 'Others' : categoryFromString(categoryName));
+      
       bars.add(
         Expanded(
           flex: percentage.toInt(),
           child: OpenContainer<Object>(
             closedElevation: 0,
-            closedColor: _getCategoryColor(category),
-            openColor: _getCategoryColor(category),
-            middleColor: _getCategoryColor(category),
+            closedColor: color,
+            openColor: color,
+            middleColor: color,
             closedShape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.zero,
             ),
             openElevation: 0,
             transitionDuration: const Duration(milliseconds: 500),
             closedBuilder: (context, action) => Container(
-              color: _getCategoryColor(category),
+              color: color,
               child: Center(
                 child: Text(
-                  '$category\n${_formatAmountToThousands(amount)}',
+                  '$categoryName\n${_formatAmountToThousands(amount)}',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
             openBuilder: (context, action) {
               List<Expense> filtered;
-              if (category == 'Others') {
+              if (categoryName == 'Others') {
                 // Get the top 3 category names to identify which ones are "Others"
                 final Map<Category, double> categoryTotals = {};
                 for (var expense in expenses) {
@@ -764,13 +704,13 @@ class HomePageState extends State<HomePage>
                     .toList();
               } else {
                 filtered = expenses
-                    .where((e) => e.category.name == category)
+                    .where((e) => e.category.name == categoryName)
                     .toList();
               }
               return CategoryExpensesPage(
-                categoryName: category,
+                categoryName: categoryName,
                 expenses: filtered,
-                backgroundColor: _getCategoryColor(category),
+                backgroundColor: color,
                 onClose: action,
               );
             },
@@ -839,10 +779,10 @@ class HomePageState extends State<HomePage>
                     const SizedBox(height: 4),
                     Text(
                       _currencyFormat.format(_totalExpensesDisplay),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blueGrey,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ],
@@ -870,10 +810,10 @@ class HomePageState extends State<HomePage>
                         const SizedBox(height: 4),
                         Text(
                           _currencyFormat.format(_getExpensesPaidByDisplay("Manuel")),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Colors.green,
+                            color: Theme.of(context).colorScheme.tertiary,
                           ),
                         ),
                       ],
@@ -899,10 +839,10 @@ class HomePageState extends State<HomePage>
                         const SizedBox(height: 4),
                         Text(
                           _currencyFormat.format(_getExpensesPaidByDisplay("Tamara")),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Colors.orange,
+                            color: Theme.of(context).colorScheme.secondary,
                           ),
                         ),
                       ],

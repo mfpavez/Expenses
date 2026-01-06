@@ -41,7 +41,17 @@ class MyApp extends StatelessWidget {
       title: 'Expenses',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blueGrey,
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6750A4),
+          secondary: const Color(0xFF625B71),
+          tertiary: const Color(0xFF7D5260),
+          error: const Color(0xFFB3261E),
+          brightness: Brightness.light,
+        ),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+        ),
         visualDensity: VisualDensity.adaptivePlatformDensity,
         textTheme: const TextTheme(
           titleLarge: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),

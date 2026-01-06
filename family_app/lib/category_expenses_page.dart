@@ -36,24 +36,7 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
     _currentExpenses = List.from(widget.expenses);
   }
 
-  Color _getCategoryColor(String category) {
-    switch (category.toLowerCase()) {
-      case 'supermarket':
-        return Colors.pink[200]!;
-      case 'house bills':
-        return Colors.blue[200]!;
-      case 'credito':
-        return Colors.green[200]!;
-      case 'contribuciones':
-        return Colors.orange[200]!;
-      case 'education':
-        return Colors.purple[200]!;
-      case 'others':
-        return Colors.blueGrey[300]!;
-      default:
-        return Colors.grey[400]!;
-    }
-  }
+
 
   Future<void> _showEditExpenseDialog(Expense expense) async {
     Category selectedCategory = expense.category;
@@ -250,14 +233,8 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
         backgroundColor: widget.backgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
-          onPressed: () {
-            if (widget.onClose != null) {
-              widget.onClose!(returnValue: _wasChanged);
-            } else {
-              Navigator.of(context).pop(_wasChanged);
-            }
-          },
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
+          onPressed: () => Navigator.of(context).pop(_wasChanged),
         ),
       ),
       body: _currentExpenses.isEmpty
@@ -276,20 +253,19 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
                     startActionPane: ActionPane(
                       motion: const ScrollMotion(),
                       children: [
-                        SlidableAction(
-                          onPressed: (context) => _showEditExpenseDialog(expense),
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          icon: Icons.edit,
-                          label: 'Edit',
-                        ),
-                      ],
+                                                  SlidableAction(
+                                                    onPressed: (context) => _showEditExpenseDialog(expense),
+                                                    backgroundColor: Theme.of(context).colorScheme.primary,
+                                                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                                    icon: Icons.edit,
+                                                    label: 'Edit',
+                                                  ),                      ],
                     ),
                                           endActionPane: ActionPane(
                                             motion: const ScrollMotion(),
                                             children: [
                                               SlidableAction(
-                                                onPressed: (context) async {
+                                                onPressed: (actionContext) async {
                                                   final bool? shouldDelete = await showDialog<bool>(
                                                     context: context,
                                                     builder: (BuildContext context) {
@@ -320,19 +296,19 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
                                                       context: context,
                                                       barrierDismissible: false,
                                                       builder: (BuildContext context) {
-                                                        return const AlertDialog(
+                                                        return AlertDialog(
                                                           content: Row(
                                                             children: [
                                                               SizedBox(
                                                                 height: 20,
                                                                 width: 20,
                                                                 child: SpinKitSpinningLines(
-                                                                  color: Colors.blueGrey,
+                                                                  color: Theme.of(context).colorScheme.primary,
                                                                   size: 20,
                                                                 ),
                                                               ),
-                                                              SizedBox(width: 20),
-                                                              Text('Deleting...'),
+                                                              const SizedBox(width: 20),
+                                                              const Text('Deleting...'),
                                                             ],
                                                           ),
                                                         );
@@ -368,12 +344,11 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
                                                     }
                                                   }
                                                 },
-                                                backgroundColor: Colors.red,
-                                                foregroundColor: Colors.white,
-                                                icon: Icons.delete,
-                                                label: 'Delete',
-                                              ),
-                                            ],
+                                                                            backgroundColor: Theme.of(context).colorScheme.error,
+                                                                            foregroundColor: Theme.of(context).colorScheme.onError,
+                                                                            icon: Icons.delete,
+                                                                            label: 'Delete',
+                                                                          ),                                            ],
                                           ),                      child: ListTile(
                         leading: CircleAvatar(
                           radius: 15,
@@ -394,14 +369,14 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
                                 fontSize: 14,
                               ),
                             ),
-                            Text(
-                              expense.category.name,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: _getCategoryColor(expense.category.name),
-                              ),
-                            ),
+                                      Text(
+                                        expense.category.name,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: expense.category.color,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                           ],
                         ),
                       ),

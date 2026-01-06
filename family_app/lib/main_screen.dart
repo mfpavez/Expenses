@@ -28,12 +28,11 @@ class _MainScreenState extends State<MainScreen> {
       appBar: AppBar(
         title: const Text(
           'Expenses',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.blueGrey,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: const Icon(Icons.refresh),
             onPressed: () {
               if (_currentPage == 0) {
                 _homePageKey.currentState?.fetchCurrentMonthExpenses(refreshCache: true);
@@ -46,19 +45,19 @@ class _MainScreenState extends State<MainScreen> {
             icon: Container(
               padding: const EdgeInsets.all(8.0),
               decoration: BoxDecoration(
-                color: _currentPage == 0 ? Colors.white : Colors.transparent,
+                color: _currentPage == 0 ? Theme.of(context).colorScheme.primaryContainer : Colors.transparent,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.list_alt,
-                color: _currentPage == 0 ? Colors.blueGrey : Colors.white,
+                color: _currentPage == 0 ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             onPressed: () {
               _pageController.animateToPage(
                 0,
                 duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
+                curve: Curves.easeOut,
               );
             },
           ),
@@ -66,22 +65,23 @@ class _MainScreenState extends State<MainScreen> {
             icon: Container(
               padding: const EdgeInsets.all(8.0),
               decoration: BoxDecoration(
-                color: _currentPage == 1 ? Colors.white : Colors.transparent,
+                color: _currentPage == 1 ? Theme.of(context).colorScheme.primaryContainer : Colors.transparent,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.compare_arrows,
-                color: _currentPage == 1 ? Colors.blueGrey : Colors.white,
+                color: _currentPage == 1 ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             onPressed: () {
               _pageController.animateToPage(
                 1,
                 duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
+                curve: Curves.easeOut,
               );
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: PageView(
@@ -90,6 +90,9 @@ class _MainScreenState extends State<MainScreen> {
           setState(() {
             _currentPage = page;
           });
+          if (page == 1) {
+            _balancePageKey.currentState?.animateChart();
+          }
         },
         children: [
           HomePage(key: _homePageKey),

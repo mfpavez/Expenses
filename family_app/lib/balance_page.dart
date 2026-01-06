@@ -16,7 +16,7 @@ class BalancePage extends StatefulWidget {
   State<BalancePage> createState() => BalancePageState();
 }
 
-class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientMixin<BalancePage> {
+class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientMixin<BalancePage>, SingleTickerProviderStateMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -31,6 +31,9 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   bool _isDataLoaded = false;
   bool _isAddingPayout = false;
 
+  late AnimationController _chartAnimationController;
+  late Animation<double> _chartAnimation;
+
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'es_CL',
     symbol: '',
@@ -40,12 +43,34 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   @override
   void initState() {
     super.initState();
+    _chartAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    );
+    _chartAnimation = CurvedAnimation(
+      parent: _chartAnimationController,
+      curve: Curves.easeOutQuart,
+    );
+
     if (!_isDataLoaded) {
       final now = DateTime.now();
       _currentMonthName = DateFormat('MMMM').format(now);
       _previousMonth1Name = DateFormat('MMMM').format(DateTime(now.year, now.month - 1));
       _previousMonth2Name = DateFormat('MMMM').format(DateTime(now.year, now.month - 2));
       _fetchAllData();
+    }
+  }
+
+  @override
+  void dispose() {
+    _chartAnimationController.dispose();
+    super.dispose();
+  }
+
+  void animateChart() {
+    debugPrint('animateChart triggered');
+    if (mounted) {
+      _chartAnimationController.forward(from: 0.0);
     }
   }
 
@@ -62,6 +87,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
         _isDataLoaded = true;
         _isLoading = false;
       });
+      animateChart();
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -186,7 +212,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
       body: _isLoading
           ? Center(
               child: SpinKitRotatingPlain(
-                color: Colors.blueGrey,
+                color: Theme.of(context).colorScheme.primary,
                 size: 50.0,
               ),
             )
@@ -254,101 +280,114 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                           height: 200,
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final lineBarsData = [
-                                LineChartBarData(
-                                  spots: last13MonthsTotals
-                                      .asMap()
-                                      .entries
-                                      .map((e) =>
-                                          FlSpot(e.key.toDouble(), e.value))
-                                      .toList(),
-                                  isCurved: true,
-                                  color: Colors.blueGrey,
-                                  barWidth: 3,
-                                  isStrokeCapRound: true,
-                                  dotData: const FlDotData(show: true),
-                                  belowBarData: BarAreaData(
-                                    show: true,
-                                    color: Colors.blueGrey.withOpacity(0.1),
-                                  ),
-                                ),
-                              ];
+                          child: AnimatedBuilder(
+                            animation: _chartAnimation,
+                            builder: (context, child) {
+                              return LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final lineBarsData = [
+                                    LineChartBarData(
+                                      spots: last13MonthsTotals
+                                          .asMap()
+                                          .entries
+                                          .map((e) =>
+                                              FlSpot(e.key.toDouble(), e.value * _chartAnimation.value))
+                                          .toList(),
+                                      isCurved: true,
+                                      color: Theme.of(context).colorScheme.primary,
+                                      barWidth: 3,
+                                      isStrokeCapRound: true,
+                                      dotData: const FlDotData(show: true),
+                                      belowBarData: BarAreaData(
+                                        show: true,
+                                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                      ),
+                                    ),
+                                  ];
 
-                              final tooltipsOnBar = lineBarsData[0].spots.map((spot) {
-                                return ShowingTooltipIndicators([
-                                  LineBarSpot(
-                                    lineBarsData[0],
-                                    0,
-                                    spot,
-                                  ),
-                                ]);
-                              }).toList();
+                                  final tooltipsOnBar = lineBarsData[0].spots.map((spot) {
+                                    return ShowingTooltipIndicators([
+                                      LineBarSpot(
+                                        lineBarsData[0],
+                                        0,
+                                        spot,
+                                      ),
+                                    ]);
+                                  }).toList();
 
-                              return LineChart(
-                                LineChartData(
-                                  showingTooltipIndicators: tooltipsOnBar,
-                                  gridData: const FlGridData(show: false),
-                                  titlesData: FlTitlesData(
-                                    show: true,
-                                    rightTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                    topTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                    leftTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                    bottomTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        getTitlesWidget: (value, meta) {
-                                          final index = value.toInt();
-                                          if (index >= 0 && index < monthLabels.length) {
-                                            return Padding(
-                                              padding: const EdgeInsets.only(top: 24.0),
-                                              child: Text(
-                                                monthLabels[index],
-                                                style: const TextStyle(
-                                                  color: Colors.blueGrey,
+                                  final double rawMaxY = last13MonthsTotals.isEmpty 
+                                      ? 0 
+                                      : last13MonthsTotals.reduce((a, b) => a > b ? a : b);
+                                  final double maxY = rawMaxY == 0 ? 1000 : rawMaxY * 1.2;
+
+                                  return LineChart(
+                                    LineChartData(
+                                      minY: 0,
+                                      maxY: maxY,
+                                      showingTooltipIndicators: tooltipsOnBar,
+                                      gridData: const FlGridData(show: false),
+                                      titlesData: FlTitlesData(
+                                        show: true,
+                                        rightTitles: const AxisTitles(
+                                          sideTitles: SideTitles(showTitles: false),
+                                        ),
+                                        topTitles: const AxisTitles(
+                                          sideTitles: SideTitles(showTitles: false),
+                                        ),
+                                        leftTitles: const AxisTitles(
+                                          sideTitles: SideTitles(showTitles: false),
+                                        ),
+                                        bottomTitles: AxisTitles(
+                                          sideTitles: SideTitles(
+                                            showTitles: true,
+                                            getTitlesWidget: (value, meta) {
+                                              final index = value.toInt();
+                                              if (index >= 0 && index < monthLabels.length) {
+                                                return Padding(
+                                                  padding: const EdgeInsets.only(top: 24.0),
+                                                  child: Text(
+                                                    monthLabels[index],
+                                                    style: TextStyle(
+                                                      color: Theme.of(context).colorScheme.primary,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 10,
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                              return const Text('');
+                                            },
+                                            interval: 1,
+                                            reservedSize: 40,
+                                          ),
+                                        ),
+                                      ),
+                                      borderData: FlBorderData(show: false),
+                                      lineBarsData: lineBarsData,
+                                      lineTouchData: LineTouchData(
+                                        enabled: false,
+                                        touchTooltipData: LineTouchTooltipData(
+                                          getTooltipColor: (touchedSpot) => Colors.transparent,
+                                          tooltipPadding: EdgeInsets.zero,
+                                          tooltipMargin: 8,
+                                          getTooltipItems: (touchedSpots) {
+                                            return touchedSpots.map((LineBarSpot touchedSpot) {
+                                              return LineTooltipItem(
+                                                _formatAmountToThousands(touchedSpot.y / (_chartAnimation.value > 0 ? _chartAnimation.value : 1)),
+                                                TextStyle(
+                                                  color: Theme.of(context).colorScheme.primary,
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 10,
                                                 ),
-                                              ),
-                                            );
-                                          }
-                                          return const Text('');
-                                        },
-                                        interval: 1,
-                                        reservedSize: 40,
+                                              );
+                                            }).toList();
+                                          },
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  borderData: FlBorderData(show: false),
-                                  lineBarsData: lineBarsData,
-                                  lineTouchData: LineTouchData(
-                                    enabled: false,
-                                    touchTooltipData: LineTouchTooltipData(
-                                      getTooltipColor: (touchedSpot) => Colors.transparent,
-                                      tooltipPadding: EdgeInsets.zero,
-                                      tooltipMargin: 8,
-                                      getTooltipItems: (touchedSpots) {
-                                        return touchedSpots.map((LineBarSpot touchedSpot) {
-                                          return LineTooltipItem(
-                                            _formatAmountToThousands(touchedSpot.y),
-                                            const TextStyle(
-                                              color: Colors.blueGrey,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 10,
-                                            ),
-                                          );
-                                        }).toList();
-                                      },
-                                    ),
-                                  ),
-                                ),
+                                    duration: const Duration(milliseconds: 50),
+                                  );
+                                },
                               );
                             },
                           ),
@@ -361,27 +400,19 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     );
   }
 
-  Color _getCategoryColor(String category) {
-    switch (category.toLowerCase()) {
-      case 'supermarket':
-        return Colors.pink[200]!;
-      case 'house bills':
-        return Colors.blue[200]!;
-      case 'credito':
-        return Colors.green[200]!;
-      case 'contribuciones':
-        return Colors.orange[200]!;
-      case 'education':
-        return Colors.purple[200]!;
-      case 'leisure':
-        return Colors.teal[200]!;
-      case 'uber eats':
-        return Colors.yellow[400]!;
-      case 'others':
-        return Colors.blueGrey[300]!;
-      default:
-        return Colors.grey[400]!;
+  Color _getCategoryColor(dynamic category) {
+    if (category is Category) {
+      return category.color;
+    } else if (category is String) {
+       // Handle 'Others' or string lookups
+       if (category == 'Others') return const Color(0xFF607D8B); // Blue Grey
+       try {
+         return categoryFromString(category).color;
+       } catch (_) {
+         return const Color(0xFF9E9E9E);
+       }
     }
+    return const Color(0xFF9E9E9E);
   }
 
   Widget _buildCategorySummaryChart(List<Expense> expenses) {
@@ -397,34 +428,36 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     }
 
     List<Widget> bars = [];
-    categorySummary.forEach((category, amount) {
+    categorySummary.forEach((categoryName, amount) {
       final percentage = (amount / total) * 100;
+      final color = _getCategoryColor(categoryName == 'Others' ? 'Others' : categoryFromString(categoryName));
+
       bars.add(
         Expanded(
           flex: percentage.toInt(),
           child: OpenContainer<Object>(
             closedElevation: 0,
-            closedColor: _getCategoryColor(category),
-            openColor: _getCategoryColor(category),
-            middleColor: _getCategoryColor(category),
+            closedColor: color,
+            openColor: color,
+            middleColor: color,
             closedShape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.zero,
             ),
             openElevation: 0,
             transitionDuration: const Duration(milliseconds: 500),
             closedBuilder: (context, action) => Container(
-              color: _getCategoryColor(category),
+              color: color,
               child: Center(
                 child: Text(
-                  '$category\n${_formatAmountToThousands(amount)}',
+                  '$categoryName\n${_formatAmountToThousands(amount)}',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
             openBuilder: (context, action) {
               List<Expense> filtered;
-              if (category == 'Others') {
+              if (categoryName == 'Others') {
                 // Get the top 3 category names to identify which ones are "Others"
                 final Map<Category, double> categoryTotals = {};
                 for (var expense in nonX2Expenses) {
@@ -444,13 +477,13 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                     .toList();
               } else {
                 filtered = nonX2Expenses
-                    .where((e) => e.category.name == category)
+                    .where((e) => e.category.name == categoryName)
                     .toList();
               }
               return CategoryExpensesPage(
-                categoryName: category,
+                categoryName: categoryName,
                 expenses: filtered,
-                backgroundColor: _getCategoryColor(category),
+                backgroundColor: color,
                 onClose: action,
               );
             },
@@ -566,16 +599,16 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
       creditor = 'Manuel';
       statusText = 'Tamara owes Manuel';
       amountText = _currencyFormat.format(amountOwed);
-      messageColor = Colors.grey[700]!;
+      messageColor = Theme.of(context).colorScheme.onSurfaceVariant;
     } else if (manuelNetBalance < 0) {
       debtor = 'Manuel';
       creditor = 'Tamara';
       statusText = 'Manuel owes Tamara';
       amountText = _currencyFormat.format(amountOwed);
-      messageColor = Colors.grey[700]!;
+      messageColor = Theme.of(context).colorScheme.onSurfaceVariant;
     } else {
       statusText = 'Balances are even!';
-      messageColor = Colors.grey[700]!;
+      messageColor = Theme.of(context).colorScheme.onSurfaceVariant;
     }
 
     return Card(
@@ -593,7 +626,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
@@ -633,12 +666,12 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                         ? SizedBox(
                             width: 20,
                             height: 20,
-                            child: SpinKitSpinningLines(color: Colors.blueGrey, size: 20))
+                            child: SpinKitSpinningLines(color: Theme.of(context).colorScheme.primary, size: 20))
                         : const Icon(Icons.compare_arrows, size: 18),
                     label: const Text('Register Payout', style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueGrey[50],
-                      foregroundColor: Colors.blueGrey[800],
+                      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                   ),
@@ -648,6 +681,33 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AnimatedNumber extends StatelessWidget {
+  final double value;
+  final String Function(num) formatter;
+  final TextStyle style;
+
+  const _AnimatedNumber({
+    required this.value,
+    required this.formatter,
+    required this.style,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: value),
+      duration: const Duration(milliseconds: 2400),
+      curve: Curves.easeOutQuart,
+      builder: (context, val, child) {
+        return Text(
+          formatter(val),
+          style: style,
+        );
+      },
     );
   }
 }

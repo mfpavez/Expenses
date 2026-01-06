@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 enum Category {
   supermarket,
   houseBills,
@@ -29,6 +31,28 @@ extension CategoryExtension on Category {
       case Category.undefined:
       default:
         return 'Undefined';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case Category.supermarket:
+        return const Color(0xFFFF9800); // Vibrant Orange
+      case Category.houseBills:
+        return const Color(0xFF2196F3); // Vibrant Blue
+      case Category.credito:
+        return const Color(0xFFF44336); // Vibrant Red
+      case Category.contribuciones:
+        return const Color(0xFF9C27B0); // Vibrant Purple
+      case Category.education:
+        return const Color(0xFF4CAF50); // Vibrant Green
+      case Category.leisure:
+        return const Color(0xFFE91E63); // Vibrant Pink
+      case Category.uberEats:
+        return const Color(0xFFFFC107); // Vibrant Amber
+      case Category.undefined:
+      default:
+        return const Color(0xFF9E9E9E); // Grey
     }
   }
 }

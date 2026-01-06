@@ -198,17 +198,16 @@ class _AddExpensePageState extends State<AddExpensePage> {
                             const SizedBox(width: 8),
                             ElevatedButton(
                               onPressed: _isAdding ? null : _submitForm,
-                              child: _isAdding
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: SpinKitSpinningLines(
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                    )
-                                  : const Text('Add'),
-                            ),
+                                                          child: _isAdding
+                                                              ? SizedBox(
+                                                                  height: 20,
+                                                                  width: 20,
+                                                                  child: SpinKitSpinningLines(
+                                                                    color: Theme.of(context).colorScheme.primary,
+                                                                    size: 20,
+                                                                  ),
+                                                                )
+                                                              : const Text('Add'),                            ),
                           ],
                         ),
                       ],

@@ -93,7 +93,7 @@ class ExpenseService {
       uri,
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
-        'rowNumber': rowNumber,
+        'row_number': rowNumber,
       }),
     );
 
@@ -117,7 +117,7 @@ class ExpenseService {
       uri,
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
-        'rowNumber': rowNumber,
+        'row_number': rowNumber,
         'item': item,
         'category': category.name,
         'date': DateFormat('MM/dd/yy').format(date),
