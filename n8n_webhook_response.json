@@ -1,0 +1,45 @@
+
+[
+  {
+    "ITEM": "Groceries",
+    "Fecha": "12/15/25",
+    "paidBy": "Alice",
+    "expenses": 50.00,
+    "row_number": 1
+  },
+  {
+    "ITEM": "Gas x2",
+    "Fecha": "12/10/25",
+    "paidBy": "Bob",
+    "expenses": 40.00,
+    "row_number": 2
+  },
+  {
+    "ITEM": "Electricity Bill",
+    "Fecha": "11/25/25",
+    "paidBy": "Alice",
+    "expenses": 75.50,
+    "row_number": 3
+  },
+  {
+    "ITEM": "Dinner Out",
+    "Fecha": "11/15/25",
+    "paidBy": "Bob",
+    "expenses": 60.00,
+    "row_number": 4
+  },
+  {
+    "ITEM": "Internet Bill",
+    "Fecha": "10/30/25",
+    "paidBy": "Alice",
+    "expenses": 55.00,
+    "row_number": 5
+  },
+  {
+    "ITEM": "Movie Tickets",
+    "Fecha": "10/5/25",
+    "paidBy": "Bob",
+    "expenses": 25.00,
+    "row_number": 6
+  }
+]

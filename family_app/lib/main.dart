@@ -1,0 +1,53 @@
+import 'package:family_app/category_expenses_page.dart';
+import 'package:family_app/models/expense.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:family_app/main_screen.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+// GoRouter configuration
+final _router = GoRouter(
+  routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const MainScreen(),
+    ),
+    GoRoute(
+      path: '/category-details',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>;
+        final categoryName = extra['categoryName'] as String;
+        final expenses = extra['expenses'] as List<Expense>;
+        return CategoryExpensesPage(
+          categoryName: categoryName,
+          expenses: expenses,
+        );
+      },
+    ),
+  ],
+);
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: 'Expenses',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.blueGrey,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        textTheme: const TextTheme(
+          titleLarge: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+          bodyMedium: TextStyle(fontSize: 12.0),
+          labelLarge: TextStyle(fontSize: 14.0, fontWeight: FontWeight.bold),
+        ),
+      ),
+      routerConfig: _router,
+    );
+  }
+}
