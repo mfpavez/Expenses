@@ -37,22 +37,22 @@ extension CategoryExtension on Category {
   Color get color {
     switch (this) {
       case Category.supermarket:
-        return const Color(0xFFFF9800); // Vibrant Orange
+        return const Color(0xFFC17942); // Lighter Warm Sienna
       case Category.houseBills:
-        return const Color(0xFF2196F3); // Vibrant Blue
+        return const Color(0xFF4A90A4); // Lighter Ocean Blue
       case Category.credito:
-        return const Color(0xFFF44336); // Vibrant Red
+        return const Color(0xFF9E749E); // Lighter Mauve
       case Category.contribuciones:
-        return const Color(0xFF9C27B0); // Vibrant Purple
+        return const Color(0xFF8B7ABF); // Lighter Indigo
       case Category.education:
-        return const Color(0xFF4CAF50); // Vibrant Green
+        return const Color(0xFF629B6B); // Lighter Natural Green
       case Category.leisure:
-        return const Color(0xFFE91E63); // Vibrant Pink
+        return const Color(0xFFBE6B8B); // Lighter Deep Rose
       case Category.uberEats:
-        return const Color(0xFFFFC107); // Vibrant Amber
+        return const Color(0xFFA48B4A); // Lighter Olive Gold
       case Category.undefined:
       default:
-        return const Color(0xFF9E9E9E); // Grey
+        return const Color(0xFF8E9196); // Lighter Slate
     }
   }
 }
@@ -75,6 +75,7 @@ Category categoryFromString(String? categoryString) {
     case 'leisure':
       return Category.leisure;
     case 'uber eats':
+    case 'ubereats':
       return Category.uberEats;
     default:
       return Category.undefined;

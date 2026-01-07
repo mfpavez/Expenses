@@ -1,5 +1,6 @@
 import 'package:family_app/category_expenses_page.dart';
 import 'package:family_app/models/expense.dart';
+import 'package:family_app/services/theme_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:family_app/main_screen.dart';
@@ -37,29 +38,35 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Expenses',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6750A4),
-          secondary: const Color(0xFF625B71),
-          tertiary: const Color(0xFF7D5260),
-          error: const Color(0xFFB3261E),
-          brightness: Brightness.light,
-        ),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-        ),
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-        textTheme: const TextTheme(
-          titleLarge: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
-          bodyMedium: TextStyle(fontSize: 12.0),
-          labelLarge: TextStyle(fontSize: 14.0, fontWeight: FontWeight.bold),
-        ),
-      ),
-      routerConfig: _router,
+    return ValueListenableBuilder<Color>(
+      valueListenable: ThemeService().seedColor,
+      builder: (context, currentSeed, _) {
+        return MaterialApp.router(
+          title: 'Expenses',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: currentSeed,
+              brightness: Brightness.light,
+            ),
+            appBarTheme: const AppBarTheme(
+              centerTitle: true,
+            ),
+            visualDensity: VisualDensity.adaptivePlatformDensity,
+            textTheme: const TextTheme(
+              titleLarge: TextStyle(
+                fontSize: 22.0,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
+              ),
+              bodyMedium: TextStyle(fontSize: 12.0),
+              labelLarge: TextStyle(fontSize: 14.0, fontWeight: FontWeight.bold),
+            ),
+          ),
+          routerConfig: _router,
+        );
+      },
     );
   }
 }

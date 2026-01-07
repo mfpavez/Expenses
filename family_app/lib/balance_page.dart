@@ -22,6 +22,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
 
   final ExpenseService _expenseService = ExpenseService();
   List<Expense> _allTimeExpenses = [];
+  Map<Category, double> _categoryBudgets = {};
   bool _isLoading = true;
   String? _error;
 
@@ -81,9 +82,14 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     });
 
     try {
-      final allExpenses = await _expenseService.fetchAllExpenses(refreshCache: refresh);
+      final results = await Future.wait([
+        _expenseService.fetchAllExpenses(refreshCache: refresh),
+        _expenseService.fetchBudget(refreshCache: refresh),
+      ]);
+
       setState(() {
-        _allTimeExpenses = allExpenses;
+        _allTimeExpenses = results[0] as List<Expense>;
+        _categoryBudgets = results[1] as Map<Category, double>;
         _isDataLoaded = true;
         _isLoading = false;
       });
@@ -230,16 +236,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const SizedBox(height: 16),
-                        const Text(
-                          'Family Balance Overview',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTotalBalanceCard(_allTimeExpenses, 'Total Balance'),
+                        _buildUnifiedBalanceCard(_allTimeExpenses),
                         const SizedBox(height: 16),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -285,7 +282,10 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                             builder: (context, child) {
                               return LayoutBuilder(
                                 builder: (context, constraints) {
+                                  final totalMonthlyBudget = _categoryBudgets.values.fold(0.0, (sum, val) => sum + val);
+
                                   final lineBarsData = [
+                                    // Main Expenses Line
                                     LineChartBarData(
                                       spots: last13MonthsTotals
                                           .asMap()
@@ -303,22 +303,39 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                                         color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                                       ),
                                     ),
+                                    // Budget Reference Line
+                                    if (totalMonthlyBudget > 0)
+                                      LineChartBarData(
+                                        spots: List.generate(
+                                          last13MonthsTotals.length,
+                                          (i) => FlSpot(i.toDouble(), totalMonthlyBudget * _chartAnimation.value),
+                                        ),
+                                        dashArray: [5, 5],
+                                        color: Theme.of(context).colorScheme.secondary.withOpacity(0.5),
+                                        barWidth: 2,
+                                        dotData: const FlDotData(show: false),
+                                      ),
                                   ];
 
-                                  final tooltipsOnBar = lineBarsData[0].spots.map((spot) {
-                                    return ShowingTooltipIndicators([
-                                      LineBarSpot(
-                                        lineBarsData[0],
-                                        0,
-                                        spot,
-                                      ),
-                                    ]);
-                                  }).toList();
+                                  final tooltipsOnBar = [lineBarsData[0]].map((bar) {
+                                    return bar.spots.map((spot) {
+                                      return ShowingTooltipIndicators([
+                                        LineBarSpot(
+                                          bar,
+                                          0,
+                                          spot,
+                                        ),
+                                      ]);
+                                    }).toList();
+                                  }).expand((i) => i).toList();
 
                                   final double rawMaxY = last13MonthsTotals.isEmpty 
-                                      ? 0 
-                                      : last13MonthsTotals.reduce((a, b) => a > b ? a : b);
-                                  final double maxY = rawMaxY == 0 ? 1000 : rawMaxY * 1.2;
+                                      ? totalMonthlyBudget 
+                                      : [
+                                          ...last13MonthsTotals,
+                                          totalMonthlyBudget
+                                        ].reduce((a, b) => a > b ? a : b);
+                                  final double maxY = rawMaxY == 0 ? 1000 : rawMaxY * 1.3;
 
                                   return LineChart(
                                     LineChartData(
@@ -435,63 +452,72 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
       bars.add(
         Expanded(
           flex: percentage.toInt(),
-          child: OpenContainer<Object>(
-            closedElevation: 0,
-            closedColor: color,
-            openColor: color,
-            middleColor: color,
-            closedShape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.zero,
-            ),
-            openElevation: 0,
-            transitionDuration: const Duration(milliseconds: 500),
-            closedBuilder: (context, action) => Container(
-              color: color,
-              child: Center(
-                child: Text(
-                  '$categoryName\n${_formatAmountToThousands(amount)}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 1.0),
+            child: Card(
+              margin: EdgeInsets.zero,
+              elevation: 2,
+              clipBehavior: Clip.antiAlias,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              child: OpenContainer<Object>(
+                closedElevation: 0,
+                closedColor: color,
+                openColor: color,
+                middleColor: color,
+                closedShape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
                 ),
+                openElevation: 0,
+                transitionDuration: const Duration(milliseconds: 500),
+                closedBuilder: (context, action) => Container(
+                  color: color,
+                  child: Center(
+                    child: Text(
+                      '$categoryName\n${_formatAmountToThousands(amount)}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                openBuilder: (context, action) {
+                  List<Expense> filtered;
+                  if (categoryName == 'Others') {
+                    // Get the top 3 category names to identify which ones are "Others"
+                    final Map<Category, double> categoryTotals = {};
+                    for (var expense in nonX2Expenses) {
+                      categoryTotals.update(
+                          expense.category, (value) => value + expense.amount,
+                          ifAbsent: () => expense.amount);
+                    }
+                    var sortedCategories = categoryTotals.entries.toList()
+                      ..sort((a, b) => b.value.compareTo(a.value));
+                    final top3Names = sortedCategories
+                        .take(3)
+                        .map((e) => e.key.name)
+                        .toSet();
+                    
+                    filtered = nonX2Expenses
+                        .where((e) => !top3Names.contains(e.category.name))
+                        .toList();
+                  } else {
+                    filtered = nonX2Expenses
+                        .where((e) => e.category.name == categoryName)
+                        .toList();
+                  }
+                  return CategoryExpensesPage(
+                    categoryName: categoryName,
+                    expenses: filtered,
+                    backgroundColor: color,
+                    onClose: action,
+                  );
+                },
+                onClosed: (result) {
+                  if (result == true) {
+                    fetchExpenses(refresh: true);
+                  }
+                },
               ),
             ),
-            openBuilder: (context, action) {
-              List<Expense> filtered;
-              if (categoryName == 'Others') {
-                // Get the top 3 category names to identify which ones are "Others"
-                final Map<Category, double> categoryTotals = {};
-                for (var expense in nonX2Expenses) {
-                  categoryTotals.update(
-                      expense.category, (value) => value + expense.amount,
-                      ifAbsent: () => expense.amount);
-                }
-                var sortedCategories = categoryTotals.entries.toList()
-                  ..sort((a, b) => b.value.compareTo(a.value));
-                final top3Names = sortedCategories
-                    .take(3)
-                    .map((e) => e.key.name)
-                    .toSet();
-                
-                filtered = nonX2Expenses
-                    .where((e) => !top3Names.contains(e.category.name))
-                    .toList();
-              } else {
-                filtered = nonX2Expenses
-                    .where((e) => e.category.name == categoryName)
-                    .toList();
-              }
-              return CategoryExpensesPage(
-                categoryName: categoryName,
-                expenses: filtered,
-                backgroundColor: color,
-                onClose: action,
-              );
-            },
-            onClosed: (result) {
-              if (result == true) {
-                fetchExpenses(refresh: true);
-              }
-            },
           ),
         ),
       );
@@ -503,11 +529,8 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
         Container(
           height: 50,
           margin: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: ClipRRect(
-            borderRadius: BorderRadius.zero,
-            child: Row(
-              children: bars,
-            ),
+          child: Row(
+            children: bars,
           ),
         ),
       ],
@@ -515,8 +538,110 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   }
 
 
-  Widget _buildTotalBalanceCard(List<Expense> expenses, String title) {
-    return _buildDifferenceOwedCard(expenses, '');
+  Widget _buildUnifiedBalanceCard(List<Expense> expenses) {
+    final double manuelNonX2 = _getNonX2ExpensesPaidBy("Manuel", expenses);
+    final double tamaraNonX2 = _getNonX2ExpensesPaidBy("Tamara", expenses);
+    final double manuelX2 = _getTotalX2ExpensesPaidBy("Manuel", expenses);
+    final double tamaraX2 = _getTotalX2ExpensesPaidBy("Tamara", expenses);
+
+    final double totalPaidByManuel = manuelNonX2 + manuelX2;
+    final double totalPaidByTamara = tamaraNonX2 + tamaraX2;
+
+    final double totalAllExpenses = totalPaidByManuel + totalPaidByTamara;
+    final double eachPersonShare = totalAllExpenses / 2;
+
+    final double manuelNetBalance = totalPaidByManuel - eachPersonShare;
+
+    String statusText;
+    String? amountText;
+    String? debtor;
+    String? creditor;
+    double amountOwed = manuelNetBalance.abs();
+
+    if (manuelNetBalance > 0) {
+      debtor = 'Tamara';
+      creditor = 'Manuel';
+      statusText = 'Tamara owes Manuel';
+      amountText = _currencyFormat.format(amountOwed);
+    } else if (manuelNetBalance < 0) {
+      debtor = 'Manuel';
+      creditor = 'Tamara';
+      statusText = 'Manuel owes Tamara';
+      amountText = _currencyFormat.format(amountOwed);
+    } else {
+      statusText = 'Balances are even!';
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8.0),
+      elevation: 2,
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Column(
+            children: [
+              Text(
+                'Family Balance Overview',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    amountText ?? 'Even',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    statusText,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+              if (debtor != null) ...[
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _isAddingPayout
+                      ? null
+                      : () => _handlePayout(debtor!, creditor!, amountOwed),
+                  icon: _isAddingPayout
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: SpinKitSpinningLines(
+                              color: Theme.of(context).colorScheme.onPrimary, size: 16))
+                      : const Icon(Icons.compare_arrows, size: 16),
+                  label: const Text('REGISTER PAYOUT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    elevation: 4,
+                    shadowColor: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _handlePayout(
@@ -571,117 +696,6 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
         setState(() => _isAddingPayout = false);
       }
     }
-  }
-
-  Widget _buildDifferenceOwedCard(List<Expense> expenses, String title) {
-    final double manuelNonX2 = _getNonX2ExpensesPaidBy("Manuel", expenses);
-    final double tamaraNonX2 = _getNonX2ExpensesPaidBy("Tamara", expenses);
-    final double manuelX2 = _getTotalX2ExpensesPaidBy("Manuel", expenses);
-    final double tamaraX2 = _getTotalX2ExpensesPaidBy("Tamara", expenses);
-
-    final double totalPaidByManuel = manuelNonX2 + manuelX2;
-    final double totalPaidByTamara = tamaraNonX2 + tamaraX2;
-
-    final double totalAllExpenses = totalPaidByManuel + totalPaidByTamara;
-    final double eachPersonShare = totalAllExpenses / 2;
-
-    final double manuelNetBalance = totalPaidByManuel - eachPersonShare;
-
-    String statusText;
-    String? amountText;
-    Color messageColor;
-    String? debtor;
-    String? creditor;
-    double amountOwed = manuelNetBalance.abs();
-
-    if (manuelNetBalance > 0) {
-      debtor = 'Tamara';
-      creditor = 'Manuel';
-      statusText = 'Tamara owes Manuel';
-      amountText = _currencyFormat.format(amountOwed);
-      messageColor = Theme.of(context).colorScheme.onSurfaceVariant;
-    } else if (manuelNetBalance < 0) {
-      debtor = 'Manuel';
-      creditor = 'Tamara';
-      statusText = 'Manuel owes Tamara';
-      amountText = _currencyFormat.format(amountOwed);
-      messageColor = Theme.of(context).colorScheme.onSurfaceVariant;
-    } else {
-      statusText = 'Balances are even!';
-      messageColor = Theme.of(context).colorScheme.onSurfaceVariant;
-    }
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (title.isNotEmpty) ...[
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      statusText,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: messageColor,
-                      ),
-                    ),
-                    if (amountText != null)
-                      Text(
-                        amountText,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: messageColor,
-                        ),
-                      ),
-                  ],
-                ),
-                if (debtor != null) ...[
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: _isAddingPayout
-                        ? null
-                        : () => _handlePayout(debtor!, creditor!, amountOwed),
-                    icon: _isAddingPayout
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: SpinKitSpinningLines(color: Theme.of(context).colorScheme.primary, size: 20))
-                        : const Icon(Icons.compare_arrows, size: 18),
-                    label: const Text('Register Payout', style: TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-                      foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

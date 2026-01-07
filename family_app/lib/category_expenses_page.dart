@@ -226,14 +226,21 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
       decimalDigits: 0,
     );
 
+    final Color foregroundColor = ThemeData.estimateBrightnessForColor(widget.backgroundColor) == Brightness.light 
+        ? Colors.black87 
+        : Colors.white;
+
     return Scaffold(
       backgroundColor: widget.backgroundColor,
       appBar: AppBar(
-        title: Text('${widget.categoryName} Expenses'),
+        title: Text(
+          '${widget.categoryName} Expenses',
+          style: TextStyle(color: foregroundColor, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: widget.backgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
+          icon: Icon(Icons.arrow_back, color: foregroundColor),
           onPressed: () => Navigator.of(context).pop(_wasChanged),
         ),
       ),
@@ -248,138 +255,150 @@ class _CategoryExpensesPageState extends State<CategoryExpensesPage> {
                     horizontal: 16.0,
                     vertical: 4.0,
                   ),
-                  elevation: 2.0,
+                  elevation: 0,
+                  color: Theme.of(context).colorScheme.primaryContainer,
                   child: Slidable(
-                    startActionPane: ActionPane(
+                    endActionPane: ActionPane(
                       motion: const ScrollMotion(),
+                      extentRatio: 0.3,
                       children: [
-                                                  SlidableAction(
-                                                    onPressed: (context) => _showEditExpenseDialog(expense),
-                                                    backgroundColor: Theme.of(context).colorScheme.primary,
-                                                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                                                    icon: Icons.edit,
-                                                    label: 'Edit',
-                                                  ),                      ],
-                    ),
-                                          endActionPane: ActionPane(
-                                            motion: const ScrollMotion(),
-                                            children: [
-                                              SlidableAction(
-                                                onPressed: (actionContext) async {
-                                                  final bool? shouldDelete = await showDialog<bool>(
-                                                    context: context,
-                                                    builder: (BuildContext context) {
-                                                      return AlertDialog(
-                                                        title: const Text('Confirm Deletion'),
-                                                        content: Text(
-                                                            'Are you sure you want to delete "${expense.item}"?'),
-                                                        actions: <Widget>[
-                                                          TextButton(
-                                                            onPressed: () =>
-                                                                Navigator.of(context).pop(false),
-                                                            child: const Text('Cancel'),
-                                                          ),
-                                                          TextButton(
-                                                            onPressed: () =>
-                                                                Navigator.of(context).pop(true),
-                                                            child: const Text('Delete'),
-                                                          ),
-                                                        ],
-                                                      );
-                                                    },
-                                                  );
-                    
-                                                  if (shouldDelete == true && expense.rowNumber != null) {
-                                                    // Show loading dialog
-                                                    if (!mounted) return;
-                                                    showDialog(
-                                                      context: context,
-                                                      barrierDismissible: false,
-                                                      builder: (BuildContext context) {
-                                                        return AlertDialog(
-                                                          content: Row(
-                                                            children: [
-                                                              SizedBox(
-                                                                height: 20,
-                                                                width: 20,
-                                                                child: SpinKitSpinningLines(
-                                                                  color: Theme.of(context).colorScheme.primary,
-                                                                  size: 20,
-                                                                ),
-                                                              ),
-                                                              const SizedBox(width: 20),
-                                                              const Text('Deleting...'),
-                                                            ],
-                                                          ),
-                                                        );
-                                                      },
-                                                    );
-                    
-                                                    try {
-                                                      await _expenseService
-                                                          .removeExpense(expense.rowNumber!);
-                                                      
-                                                      if (!mounted) return;
-                                                      Navigator.of(context).pop(); // Close loading dialog
-                    
-                                                      setState(() {
-                                                        _currentExpenses.removeAt(index);
-                                                        _wasChanged = true;
-                                                      });
-                                                      
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        SnackBar(
-                                                            content: Text(
-                                                                'Expense "${expense.item}" removed.')),
-                                                      );
-                                                    } catch (e) {
-                                                      if (!mounted) return;
-                                                      Navigator.of(context).pop(); // Close loading dialog
-                                                      
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        SnackBar(
-                                                            content: Text(
-                                                                'Failed to remove expense: $e')),
-                                                      );
-                                                    }
-                                                  }
-                                                },
-                                                                            backgroundColor: Theme.of(context).colorScheme.error,
-                                                                            foregroundColor: Theme.of(context).colorScheme.onError,
-                                                                            icon: Icons.delete,
-                                                                            label: 'Delete',
-                                                                          ),                                            ],
-                                          ),                      child: ListTile(
-                        leading: CircleAvatar(
-                          radius: 15,
-                          child: Text(expense.paidBy[0]),
+                        SlidableAction(
+                          onPressed: (context) => _showEditExpenseDialog(expense),
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                          icon: Icons.edit,
+                          label: 'Edit',
                         ),
-                        title: Text(expense.item.toUpperCase()),
-                        subtitle: Text(
-                          '${DateFormat('MM/dd/yy').format(expense.date)} - Paid by ${expense.paidBy}',
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              currencyFormat.format(expense.amount),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                                      Text(
-                                        expense.category.name,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: expense.category.color,
-                                          fontWeight: FontWeight.bold,
+                        SlidableAction(
+                          onPressed: (actionContext) async {
+                            final bool? shouldDelete = await showDialog<bool>(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  title: const Text('Confirm Deletion'),
+                                  content: Text('Are you sure you want to delete "${expense.item}"?'),
+                                  actions: <Widget>[
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(true),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+
+                            if (shouldDelete == true && expense.rowNumber != null) {
+                              if (!mounted) return;
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (BuildContext context) {
+                                  return AlertDialog(
+                                    content: Row(
+                                      children: [
+                                        SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: SpinKitSpinningLines(
+                                            color: Theme.of(context).colorScheme.primary,
+                                            size: 20,
+                                          ),
                                         ),
-                                      ),
-                          ],
+                                        const SizedBox(width: 20),
+                                        const Text('Deleting...'),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+
+                              try {
+                                await _expenseService.removeExpense(expense.rowNumber!);
+                                if (!mounted) return;
+                                Navigator.of(context).pop();
+                                setState(() {
+                                  _currentExpenses.removeAt(index);
+                                  _wasChanged = true;
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Expense "${expense.item}" removed.')),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to remove expense: $e')),
+                                );
+                              }
+                            }
+                          },
+                          backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
+                          foregroundColor: Theme.of(context).colorScheme.onTertiaryContainer,
+                          icon: Icons.delete,
+                          label: 'Delete',
+                        ),
+                      ],
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        radius: 15,
+                        backgroundColor: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.15),
+                        child: Text(
+                          expense.paidBy[0],
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
+                      title: Text(
+                        expense.item.toUpperCase(),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${DateFormat('MM/dd/yy').format(expense.date)} - Paid by ${expense.paidBy}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7),
+                        ),
+                      ),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            currencyFormat.format(expense.amount),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: expense.category.color,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              expense.category.name.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 8,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 );
               },
