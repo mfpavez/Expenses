@@ -35,8 +35,15 @@ class BudgetConfigPageState extends State<BudgetConfigPage> with AutomaticKeepAl
   }
 
   void _initializeControllers() {
-    for (var category in Category.values) {
-      if (category == Category.undefined) continue;
+    final sortedCategories = List<Category>.from(Category.values);
+    sortedCategories.sort((a, b) {
+      if (a == Category.undefined) return 1;
+      if (b == Category.undefined) return -1;
+      return a.name.compareTo(b.name);
+    });
+
+    _controllers.clear();
+    for (var category in sortedCategories) {
       final controller = TextEditingController(text: '0');
       controller.addListener(_calculateTotal);
       _controllers[category] = controller;

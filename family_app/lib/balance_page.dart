@@ -215,69 +215,97 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     }
 
     return Scaffold(
-      body: _isLoading
+      body: _error != null
           ? Center(
-              child: SpinKitRotatingPlain(
-                color: Theme.of(context).colorScheme.primary,
-                size: 50.0,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Error: $_error'),
+                ],
               ),
             )
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Error: $_error'),
-                    ],
-                  ),
-                )
-              : SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 16),
-                        _buildUnifiedBalanceCard(_allTimeExpenses),
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text(
-                            '$_currentMonthName: ${_currencyFormat.format(_calculateTotal(currentMonthExpenses))}',
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        _buildCategorySummaryChart(currentMonthExpenses),
-                        const SizedBox(height: 20),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text(
-                            '$_previousMonth1Name: ${_currencyFormat.format(_calculateTotal(previousMonth1Expenses))}',
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        _buildCategorySummaryChart(previousMonth1Expenses),
-                        const SizedBox(height: 20),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text(
-                            '$_previousMonth2Name: ${_currencyFormat.format(_calculateTotal(previousMonth2Expenses))}',
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        _buildCategorySummaryChart(previousMonth2Expenses),
-                        const SizedBox(height: 40),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text(
-                            'Expenses History (Last 13 Months)',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Container(
-                          height: 200,
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: AnimatedBuilder(
+          : SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 16),
+                    _buildUnifiedBalanceCard(_allTimeExpenses),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        child: _isLoading 
+                          ? _buildTitlePlaceholder(key: const ValueKey('t1'))
+                          : Text(
+                              '$_currentMonthName: ${_currencyFormat.format(_calculateTotal(currentMonthExpenses))}',
+                              key: const ValueKey('v1'),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                      ),
+                    ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 500),
+                      child: _isLoading 
+                        ? _buildChartPlaceholder(key: const ValueKey('c1'))
+                        : _buildCategorySummaryChart(currentMonthExpenses),
+                    ),
+                    const SizedBox(height: 20),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        child: _isLoading
+                          ? _buildTitlePlaceholder(key: const ValueKey('t2'))
+                          : Text(
+                              '$_previousMonth1Name: ${_currencyFormat.format(_calculateTotal(previousMonth1Expenses))}',
+                              key: const ValueKey('v2'),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                      ),
+                    ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 500),
+                      child: _isLoading
+                        ? _buildChartPlaceholder(key: const ValueKey('c2'))
+                        : _buildCategorySummaryChart(previousMonth1Expenses),
+                    ),
+                    const SizedBox(height: 20),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        child: _isLoading
+                          ? _buildTitlePlaceholder(key: const ValueKey('t3'))
+                          : Text(
+                              '$_previousMonth2Name: ${_currencyFormat.format(_calculateTotal(previousMonth2Expenses))}',
+                              key: const ValueKey('v3'),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                      ),
+                    ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 500),
+                      child: _isLoading
+                        ? _buildChartPlaceholder(key: const ValueKey('c3'))
+                        : _buildCategorySummaryChart(previousMonth2Expenses),
+                    ),
+                    const SizedBox(height: 40),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text(
+                        'Expenses History (Last 13 Months)',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      height: 200,
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: _isLoading 
+                        ? Center(child: SpinKitPulse(color: Theme.of(context).colorScheme.primary, size: 40))
+                        : AnimatedBuilder(
                             animation: _chartAnimation,
                             builder: (context, child) {
                               return LayoutBuilder(
@@ -414,6 +442,34 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                     ),
                   ),
 
+    );
+  }
+
+  Widget _buildTitlePlaceholder({Key? key}) {
+    return Container(
+      key: key,
+      height: 20,
+      width: 150,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const SpinKitThreeBounce(color: Colors.grey, size: 12),
+    );
+  }
+
+  Widget _buildChartPlaceholder({Key? key}) {
+    return Container(
+      key: key,
+      height: 50,
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.zero,
+      ),
+      child: const Center(
+        child: SpinKitThreeBounce(color: Colors.grey, size: 20),
+      ),
     );
   }
 
@@ -590,20 +646,57 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                 ),
               ),
               const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    amountText ?? 'Even',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                child: Row(
+                  key: ValueKey(_isLoading),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _isLoading 
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: SpinKitDoubleBounce(color: Colors.indigo, size: 28),
+                        )
+                      : Text(
+                          amountText ?? 'Even',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                    if (debtor != null || _isLoading) ...[
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: (_isAddingPayout || _isLoading)
+                            ? null
+                            : () => _handlePayout(debtor!, creditor!, amountOwed),
+                        icon: (_isAddingPayout || _isLoading)
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: SpinKitSpinningLines(
+                                    color: Theme.of(context).colorScheme.primary, size: 16))
+                            : const Icon(Icons.compare_arrows, size: 16),
+                        label: const Text('REGISTER PAYOUT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          elevation: 4,
+                          shadowColor: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              _isLoading
+                ? const SizedBox(height: 14)
+                : Text(
                     statusText,
                     style: TextStyle(
                       fontSize: 14,
@@ -611,32 +704,6 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                       color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7),
                     ),
                   ),
-                ],
-              ),
-              if (debtor != null) ...[
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: _isAddingPayout
-                      ? null
-                      : () => _handlePayout(debtor!, creditor!, amountOwed),
-                  icon: _isAddingPayout
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: SpinKitSpinningLines(
-                              color: Theme.of(context).colorScheme.onPrimary, size: 16))
-                      : const Icon(Icons.compare_arrows, size: 16),
-                  label: const Text('REGISTER PAYOUT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    elevation: 4,
-                    shadowColor: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ],
             ],
           ),
         ),

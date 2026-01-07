@@ -39,20 +39,10 @@ class _MainScreenState extends State<MainScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
-              if (_currentPage == 0) {
-                _homePageKey.currentState?.fetchCurrentMonthExpenses(refreshCache: true);
-              } else if (_currentPage == 1) {
-                _balancePageKey.currentState?.fetchExpenses(refresh: true);
-              } else if (_currentPage == 2) {
-                debugPrint('Attempting to refresh Budget tab...');
-                debugPrint('Budget Page Key: $_budgetPageKey');
-                debugPrint('Budget Page State: ${_budgetPageKey.currentState}');
-                if (_budgetPageKey.currentState != null) {
-                  _budgetPageKey.currentState!.loadBudgetData(refreshCache: true);
-                } else {
-                  debugPrint('ERROR: Budget Page State is NULL');
-                }
-              }
+              // Global Refresh: trigger all tabs to fetch absolute latest data
+              _homePageKey.currentState?.fetchCurrentMonthExpenses(refreshCache: true);
+              _balancePageKey.currentState?.fetchExpenses(refresh: true);
+              _budgetPageKey.currentState?.loadBudgetData(refreshCache: true);
             },
           ),
           IconButton(

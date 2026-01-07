@@ -101,6 +101,15 @@ class HomePageState extends State<HomePage>
         });
       });
       animateChart();
+      
+      // Trigger pre-fetching for other tabs in the background
+      // This happens right before the HomePage refresh state finishes
+      Future.delayed(const Duration(milliseconds: 100), () {
+        final expenseService = ExpenseService();
+        // These will populate the shared singleton cache
+        expenseService.fetchAllExpenses(refreshCache: refreshCache);
+        expenseService.fetchBudget(refreshCache: refreshCache);
+      });
     } catch (e) {
       setState(() {
         if (e is Exception) {
@@ -529,9 +538,7 @@ class HomePageState extends State<HomePage>
       body: Column(
         children: [
           Expanded(
-            child: _isLoading
-                ? Center(child: SpinKitRotatingPlain(color: Theme.of(context).colorScheme.primary, size: 50.0))
-                : _errorMessage != null
+            child: _errorMessage != null
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -543,13 +550,18 @@ class HomePageState extends State<HomePage>
                     ),
                   )
                 : ListView.builder(
-                    itemCount: filteredExpenses.length + 4, // Summary, Category Chart, Title, Expenses..., Budget Chart
+                    itemCount: filteredExpenses.length + 4, 
                     itemBuilder: (context, index) {
                       if (index == 0) {
                         return _buildSummaryCards();
                       }
                       if (index == 1) {
-                        return _buildCategorySummaryChart(nonX2Expenses);
+                        return AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          child: _isLoading 
+                            ? _buildChartPlaceholder('Category Summary')
+                            : _buildCategorySummaryChart(nonX2Expenses),
+                        );
                       }
                       if (index == 2) {
                         return Padding(
@@ -561,19 +573,34 @@ class HomePageState extends State<HomePage>
                                 'Recent Expenses',
                                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                               ),
-                              _buildCategoryFilter(),
+                              if (!_isLoading) _buildCategoryFilter(),
                             ],
                           ),
                         );
                       }
-                      
+
                       // Check if it's the last item (Budget Chart)
                       if (index == filteredExpenses.length + 3) {
-                        return _buildBudgetComparisonChart(nonX2Expenses);
+                        return AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          child: _isLoading
+                            ? _buildChartPlaceholder('Budget vs. Actual Spending')
+                            : _buildBudgetComparisonChart(nonX2Expenses),
+                        );
                       }
 
+                      // During loading, show placeholders between Title and Budget Chart
+                      if (_isLoading && index >= 3 && index <= 8) {
+                        return _buildLoadingCard();
+                      }
+
+                      if (_isLoading) return const SizedBox.shrink();
+
                       final expense = filteredExpenses[index - 3];
-                      return _buildExpenseCard(expense);
+                      return AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: _buildExpenseCard(expense),
+                      );
                     },
                   ),
           ),
@@ -775,7 +802,20 @@ class HomePageState extends State<HomePage>
           ifAbsent: () => expense.amount);
     }
 
-    final budgetedCategories = _categoryBudgets.entries.where((e) => e.value > 0).toList();
+    // Include all categories that either have a budget or have spending
+    final budgetedCategories = Category.values.where((c) {
+      final hasBudget = (_categoryBudgets[c] ?? 0) > 0;
+      final hasSpent = (categoryTotals[c] ?? 0) > 0;
+      return hasBudget || hasSpent;
+    }).toList();
+
+    // Sort to ensure 'undefined' is always last
+    budgetedCategories.sort((a, b) {
+      if (a == Category.undefined) return 1;
+      if (b == Category.undefined) return -1;
+      return 0;
+    });
+
     if (budgetedCategories.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -788,118 +828,124 @@ class HomePageState extends State<HomePage>
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
-        Container(
-          height: 350,
+        Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: AnimatedBuilder(
-            animation: _chartAnimation,
-            builder: (context, child) {
-              return BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: budgetedCategories.map((e) => 
-                    (categoryTotals[e.key] ?? 0) > e.value ? (categoryTotals[e.key] ?? 0) : e.value
-                  ).reduce((a, b) => a > b ? a : b) * 1.5,
-                  barTouchData: BarTouchData(
-                    enabled: false,
-                    touchTooltipData: BarTouchTooltipData(
-                      getTooltipColor: (group) {
-                        final index = group.x;
-                        if (index < 0 || index >= budgetedCategories.length) return Colors.transparent;
-                        final category = budgetedCategories[index].key;
-                        final spent = categoryTotals[category] ?? 0.0;
-                        final budget = budgetedCategories[index].value;
-                        return spent > budget ? Theme.of(context).colorScheme.error : category.color;
-                      },
-                      tooltipPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      tooltipMargin: 4,
-                      fitInsideHorizontally: true,
-                      fitInsideVertically: true,
-                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                        if (rodIndex == 0) return null;
-                        
-                        final category = budgetedCategories[groupIndex].key;
-                        final spent = categoryTotals[category] ?? 0.0;
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: SizedBox(
+              height: 350,
+              child: AnimatedBuilder(
+                animation: _chartAnimation,
+                builder: (context, child) {
+                  return BarChart(
+                    BarChartData(
+                      alignment: BarChartAlignment.spaceAround,
+                      maxY: budgetedCategories.map((c) {
+                        final spent = categoryTotals[c] ?? 0;
+                        final budget = _categoryBudgets[c] ?? 0;
+                        return spent > budget ? spent : budget;
+                      }).reduce((a, b) => a > b ? a : b) * 1.5,
+                      barTouchData: BarTouchData(
+                        enabled: false,
+                        touchTooltipData: BarTouchTooltipData(
+                          getTooltipColor: (group) {
+                            final index = group.x;
+                            if (index < 0 || index >= budgetedCategories.length) return Colors.transparent;
+                            return budgetedCategories[index].color;
+                          },
+                          tooltipPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          tooltipMargin: 4,
+                          fitInsideHorizontally: true,
+                          fitInsideVertically: true,
+                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                            if (rodIndex == 0) return null;
+                            
+                            final category = budgetedCategories[groupIndex];
+                            final spent = categoryTotals[category] ?? 0.0;
 
-                        return BarTooltipItem(
-                          _formatAmountToThousands(spent * _chartAnimation.value),
-                          const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (value, meta) {
-                          final index = value.toInt();
-                          if (index >= 0 && index < budgetedCategories.length) {
-                            final category = budgetedCategories[index].key;
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: RotatedBox(
-                                quarterTurns: 1,
-                                child: Text(
-                                  category.name.toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: 8, 
-                                    fontWeight: FontWeight.w900,
-                                    color: category.color,
-                                  ),
-                                ),
+                            return BarTooltipItem(
+                              _formatAmountToThousands(spent * _chartAnimation.value),
+                              const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 9,
                               ),
                             );
-                          }
-                          return const Text('');
-                        },
-                        reservedSize: 80,
+                          },
+                        ),
                       ),
-                    ),
-                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  ),
-                  gridData: const FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                  barGroups: budgetedCategories.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final category = entry.value.key;
-                    final budget = entry.value.value;
-                    final spent = categoryTotals[category] ?? 0.0;
-                    
-                    // Use a slightly larger minimum height to ensure tooltip placement is consistent
-                    final animatedBudget = (budget == 0 ? 1.0 : budget) * _chartAnimation.value;
-                    final animatedSpent = (spent == 0 ? 1.0 : spent) * _chartAnimation.value;
+                      titlesData: FlTitlesData(
+                        show: true,
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) {
+                              final index = value.toInt();
+                              if (index >= 0 && index < budgetedCategories.length) {
+                                final category = budgetedCategories[index];
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: RotatedBox(
+                                    quarterTurns: 1,
+                                    child: Text(
+                                      category.name.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 8, 
+                                        fontWeight: FontWeight.w900,
+                                        color: category.color,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                              return const Text('');
+                            },
+                            reservedSize: 80,
+                          ),
+                        ),
+                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      ),
+                      gridData: const FlGridData(show: false),
+                      borderData: FlBorderData(show: false),
+                      barGroups: budgetedCategories.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final category = entry.value;
+                        final budget = _categoryBudgets[category] ?? 0.0;
+                        final spent = categoryTotals[category] ?? 0.0;
 
-                    return BarChartGroupData(
-                      x: index,
-                      showingTooltipIndicators: [1],
-                      barRods: [
-                        BarChartRodData(
-                          toY: animatedBudget,
-                          color: category.color.withOpacity(0.2),
-                          width: 18,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                        ),
-                        BarChartRodData(
-                          toY: animatedSpent,
-                          color: spent > budget ? Theme.of(context).colorScheme.error : category.color,
-                          width: 18,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-                duration: Duration.zero,
-              );
-            },
+                        return BarChartGroupData(
+                          x: index,
+                          showingTooltipIndicators: [1],
+                          barRods: [
+                            // Budget Rod (Light/Ghostly)
+                            BarChartRodData(
+                              toY: (budget == 0 ? 1.0 : budget) * _chartAnimation.value,
+                              color: category.color.withOpacity(0.2),
+                              width: 18,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                            ),
+                            // Actual Rod (Solid)
+                            BarChartRodData(
+                              toY: (spent == 0 ? 1.0 : spent) * _chartAnimation.value,
+                              color: category.color,
+                              width: 18,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                    duration: Duration.zero,
+                  );
+                },
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 100),
@@ -918,6 +964,61 @@ class HomePageState extends State<HomePage>
     return '${NumberFormat('#,##0', 'en_US').format(thousands)}k';
   }
 
+  Widget _buildLoadingCard() {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+      child: ListTile(
+        leading: CircleAvatar(
+          radius: 15,
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        ),
+        title: Container(
+          height: 12,
+          width: 100,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        subtitle: Container(
+          height: 8,
+          width: 150,
+          margin: const EdgeInsets.only(top: 4),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        trailing: const SpinKitPulse(color: Colors.grey, size: 20),
+      ),
+    );
+  }
+
+  Widget _buildChartPlaceholder(String title) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ),
+        Container(
+          height: 50,
+          margin: const EdgeInsets.symmetric(horizontal: 16.0),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: const Center(
+            child: SpinKitThreeBounce(color: Colors.grey, size: 20),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSummaryCards() {
     return Padding(
       padding: const EdgeInsets.all(8.0),
@@ -933,7 +1034,12 @@ class HomePageState extends State<HomePage>
                   children: [
                     Text('Total Expenses This Month', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onPrimaryContainer)),
                     const SizedBox(height: 4),
-                    Text(_currencyFormat.format(_totalExpensesDisplay), style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary)),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 400),
+                      child: _isLoading 
+                        ? const SpinKitDoubleBounce(key: ValueKey('loading'), color: Colors.indigo, size: 28)
+                        : Text(_currencyFormat.format(_totalExpensesDisplay), key: const ValueKey('data'), style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary)),
+                    ),
                   ],
                 ),
               ),
@@ -952,7 +1058,12 @@ class HomePageState extends State<HomePage>
                       children: [
                         Text('Paid by Manuel', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onPrimaryContainer)),
                         const SizedBox(height: 4),
-                        Text(_currencyFormat.format(_getExpensesPaidByDisplay("Manuel")), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 400),
+                          child: _isLoading 
+                            ? const SpinKitDoubleBounce(key: ValueKey('loading_m'), color: Colors.indigo, size: 16)
+                            : Text(_currencyFormat.format(_getExpensesPaidByDisplay("Manuel")), key: const ValueKey('data_m'), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                        ),
                       ],
                     ),
                   ),
@@ -969,7 +1080,12 @@ class HomePageState extends State<HomePage>
                       children: [
                         Text('Paid by Tamara', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onPrimaryContainer)),
                         const SizedBox(height: 4),
-                        Text(_currencyFormat.format(_getExpensesPaidByDisplay("Tamara")), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 400),
+                          child: _isLoading 
+                            ? const SpinKitDoubleBounce(key: ValueKey('loading_t'), color: Colors.indigo, size: 16)
+                            : Text(_currencyFormat.format(_getExpensesPaidByDisplay("Tamara")), key: const ValueKey('data_t'), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                        ),
                       ],
                     ),
                   ),

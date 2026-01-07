@@ -5,6 +5,10 @@ import 'package:intl/intl.dart';
 import '../models/expense.dart';
 
 class ExpenseService {
+  static final ExpenseService _instance = ExpenseService._internal();
+  factory ExpenseService() => _instance;
+  ExpenseService._internal() : _client = http.Client();
+
   final http.Client _client;
 
   // Caching mechanism
@@ -25,8 +29,6 @@ class ExpenseService {
       'https://www.pxghub.com/webhook/get-budget';
   final String _n8nUpdateBudgetWebhookUrl = 
       'https://www.pxghub.com/webhook/modify-budget';
-
-  ExpenseService({http.Client? client}) : _client = client ?? http.Client();
 
   Future<Map<Category, double>> fetchBudget({bool refreshCache = false}) async {
     const cacheKey = 'budget';
