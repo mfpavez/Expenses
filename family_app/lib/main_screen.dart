@@ -85,20 +85,19 @@ class _MainScreenState extends State<MainScreen> {
               );
             },
           ),
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8.0),
-              decoration: BoxDecoration(
-                color: _currentPage == 2 ? Theme.of(context).colorScheme.onPrimary : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.settings_suggest,
-                color: _currentPage == 2 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onPrimary.withOpacity(0.7),
-              ),
-            ),
-            onPressed: () {
-              _pageController.animateToPage(
+                      IconButton(
+                      icon: Container(
+                        padding: const EdgeInsets.all(8.0),
+                        decoration: BoxDecoration(
+                          color: _currentPage == 2 ? Theme.of(context).colorScheme.onPrimary : Colors.transparent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.attach_money,
+                          color: _currentPage == 2 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onPrimary.withOpacity(0.7),
+                        ),
+                      ),
+                      onPressed: () {              _pageController.animateToPage(
                 2,
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOut,

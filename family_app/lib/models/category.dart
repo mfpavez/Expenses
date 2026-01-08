@@ -8,7 +8,7 @@ enum Category {
   contribuciones,
   education,
   leisure,
-  uberEats,
+  health,
 }
 
 extension CategoryExtension on Category {
@@ -26,8 +26,8 @@ extension CategoryExtension on Category {
         return 'Education';
       case Category.leisure:
         return 'Leisure';
-      case Category.uberEats:
-        return 'Uber Eats';
+      case Category.health:
+        return 'Health';
       case Category.undefined:
       default:
         return 'Undefined';
@@ -48,8 +48,8 @@ extension CategoryExtension on Category {
         return const Color(0xFF629B6B); // Lighter Natural Green
       case Category.leisure:
         return const Color(0xFFBE6B8B); // Lighter Deep Rose
-      case Category.uberEats:
-        return const Color(0xFFA48B4A); // Lighter Olive Gold
+      case Category.health:
+        return const Color(0xFF009688); // Teal
       case Category.undefined:
       default:
         return const Color(0xFF8E9196); // Lighter Slate
@@ -74,9 +74,10 @@ Category categoryFromString(String? categoryString) {
       return Category.education;
     case 'leisure':
       return Category.leisure;
-    case 'uber eats':
+    case 'health':
+    case 'uber eats': // Keep backward compatibility for parsing if needed temporarily
     case 'ubereats':
-      return Category.uberEats;
+      return Category.health;
     default:
       return Category.undefined;
   }

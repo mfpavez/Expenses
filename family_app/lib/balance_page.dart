@@ -1,4 +1,5 @@
 import 'package:family_app/models/category.dart';
+import 'package:family_app/utils/month_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:family_app/models/expense.dart';
 import 'package:family_app/services/expense_service.dart';
@@ -31,6 +32,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   String _previousMonth2Name = '';
   bool _isDataLoaded = false;
   bool _isAddingPayout = false;
+  Category? _selectedFilterCategory;
 
   late AnimationController _chartAnimationController;
   late Animation<double> _chartAnimation;
@@ -55,9 +57,9 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
 
     if (!_isDataLoaded) {
       final now = DateTime.now();
-      _currentMonthName = DateFormat('MMMM').format(now);
-      _previousMonth1Name = DateFormat('MMMM').format(DateTime(now.year, now.month - 1));
-      _previousMonth2Name = DateFormat('MMMM').format(DateTime(now.year, now.month - 2));
+      _currentMonthName = MonthUtils.getSpanishMonth(now);
+      _previousMonth1Name = MonthUtils.getSpanishMonth(DateTime(now.year, now.month - 1));
+      _previousMonth2Name = MonthUtils.getSpanishMonth(DateTime(now.year, now.month - 2));
       _fetchAllData();
     }
   }
@@ -84,7 +86,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     try {
       final results = await Future.wait([
         _expenseService.fetchAllExpenses(refreshCache: refresh),
-        _expenseService.fetchBudget(refreshCache: refresh),
+        _expenseService.fetchBudget(_currentMonthName, refreshCache: refresh),
       ]);
 
       setState(() {
@@ -121,7 +123,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   Map<String, List<Expense>> _groupExpensesByMonth(List<Expense> expenses) {
     final Map<String, List<Expense>> grouped = {};
     for (final expense in expenses) {
-      final month = DateFormat('MMMM').format(expense.date);
+      final month = MonthUtils.getSpanishMonth(expense.date);
       if (grouped[month] == null) {
         grouped[month] = [];
       }
@@ -130,12 +132,55 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     return grouped;
   }
 
+  Widget _buildCategoryFilter() {
+    List<DropdownMenuItem<Category?>> items = [
+      DropdownMenuItem<Category?>(
+        value: null,
+        child: const Text("All Categories"),
+      ),
+    ];
+
+    items.addAll(Category.values.map((category) {
+      return DropdownMenuItem<Category?>(
+        value: category,
+        child: Text(category.name),
+      );
+    }).toList());
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          const Icon(Icons.filter_list),
+          const SizedBox(width: 8),
+          DropdownButton<Category?>(
+            value: _selectedFilterCategory,
+            hint: const Text("Filter by Category"),
+            onChanged: (Category? newValue) {
+              setState(() {
+                _selectedFilterCategory = newValue;
+              });
+              animateChart();
+            },
+            items: items,
+          ),
+        ],
+      ),
+    );
+  }
+
   Map<String, double> _getCategorySummary(List<Expense> expenses) {
     if (expenses.isEmpty) {
       return {};
     }
 
-    final nonX2Expenses = expenses.where((e) => !e.isX2).toList();
+    // Apply category filter if selected
+    final filteredExpenses = _selectedFilterCategory == null
+        ? expenses
+        : expenses.where((e) => e.category == _selectedFilterCategory).toList();
+
+    final nonX2Expenses = filteredExpenses.where((e) => !e.isX2).toList();
     if (nonX2Expenses.isEmpty) {
       return {};
     }
@@ -181,13 +226,24 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   }
 
   double _calculateTotal(List<Expense> expenses) {
-    return expenses.where((e) => !e.isX2).fold(0.0, (sum, e) => sum + e.amount);
+    // Apply category filter if selected
+    final filteredExpenses = _selectedFilterCategory == null
+        ? expenses
+        : expenses.where((e) => e.category == _selectedFilterCategory).toList();
+        
+    return filteredExpenses.where((e) => !e.isX2).fold(0.0, (sum, e) => sum + e.amount);
   }
 
   List<double> _getLast13MonthsTotals(List<Expense> allExpenses) {
     final now = DateTime.now();
     final List<double> totals = [];
-    final nonX2Expenses = allExpenses.where((e) => !e.isX2).toList();
+    
+    // Apply category filter if selected
+    final filteredExpenses = _selectedFilterCategory == null
+        ? allExpenses
+        : allExpenses.where((e) => e.category == _selectedFilterCategory).toList();
+
+    final nonX2Expenses = filteredExpenses.where((e) => !e.isX2).toList();
 
     for (int i = 12; i >= 0; i--) {
       final targetDate = DateTime(now.year, now.month - i);
@@ -211,7 +267,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     final now = DateTime.now();
     for (int i = 12; i >= 0; i--) {
       final targetDate = DateTime(now.year, now.month - i);
-      monthLabels.add(DateFormat('MMM').format(targetDate)[0]);
+      monthLabels.add(MonthUtils.getSpanishMonth(targetDate).substring(0, 3));
     }
 
     return Scaffold(
@@ -230,7 +286,9 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                   children: [
                     const SizedBox(height: 16),
                     _buildUnifiedBalanceCard(_allTimeExpenses),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
+                    if (!_isLoading) _buildCategoryFilter(),
+                    const SizedBox(height: 8),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       child: AnimatedSwitcher(
@@ -310,7 +368,12 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                             builder: (context, child) {
                               return LayoutBuilder(
                                 builder: (context, constraints) {
-                                  final totalMonthlyBudget = _categoryBudgets.values.fold(0.0, (sum, val) => sum + val);
+                                  final double totalMonthlyBudget;
+                                  if (_selectedFilterCategory != null) {
+                                    totalMonthlyBudget = _categoryBudgets[_selectedFilterCategory] ?? 0.0;
+                                  } else {
+                                    totalMonthlyBudget = _categoryBudgets.values.fold(0.0, (sum, val) => sum + val);
+                                  }
 
                                   final lineBarsData = [
                                     // Main Expenses Line
@@ -437,7 +500,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                             },
                           ),
                         ),
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 100),
                       ],
                     ),
                   ),
