@@ -33,6 +33,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   bool _isDataLoaded = false;
   bool _isAddingPayout = false;
   Category? _selectedFilterCategory;
+  List<double> _historicalBudgets = [];
 
   late AnimationController _chartAnimationController;
   late Animation<double> _chartAnimation;
@@ -64,6 +65,33 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     }
   }
 
+  Future<void> _calculateHistoricalBudgets() async {
+    final now = DateTime.now();
+    final List<double> budgets = [];
+    
+    for (int i = 12; i >= 0; i--) {
+      final targetDate = DateTime(now.year, now.month - i);
+      final monthName = MonthUtils.getSpanishMonth(targetDate);
+      
+      try {
+        final budgetMap = await _expenseService.fetchBudget(monthName);
+        if (_selectedFilterCategory != null) {
+          budgets.add(budgetMap[_selectedFilterCategory] ?? 0.0);
+        } else {
+          budgets.add(budgetMap.values.fold(0.0, (sum, val) => sum + val));
+        }
+      } catch (e) {
+        budgets.add(0.0);
+      }
+    }
+    
+    if (mounted) {
+      setState(() {
+        _historicalBudgets = budgets;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _chartAnimationController.dispose();
@@ -88,6 +116,8 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
         _expenseService.fetchAllExpenses(refreshCache: refresh),
         _expenseService.fetchBudget(_currentMonthName, refreshCache: refresh),
       ]);
+
+      await _calculateHistoricalBudgets();
 
       setState(() {
         _allTimeExpenses = results[0] as List<Expense>;
@@ -161,6 +191,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
               setState(() {
                 _selectedFilterCategory = newValue;
               });
+              _calculateHistoricalBudgets();
               animateChart();
             },
             items: items,
@@ -395,14 +426,16 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                                       ),
                                     ),
                                     // Budget Reference Line
-                                    if (totalMonthlyBudget > 0)
+                                    if (_historicalBudgets.isNotEmpty)
                                       LineChartBarData(
-                                        spots: List.generate(
-                                          last13MonthsTotals.length,
-                                          (i) => FlSpot(i.toDouble(), totalMonthlyBudget * _chartAnimation.value),
-                                        ),
+                                        spots: _historicalBudgets
+                                          .asMap()
+                                          .entries
+                                          .map((e) => FlSpot(e.key.toDouble(), e.value * _chartAnimation.value))
+                                          .toList(),
+                                        isCurved: true,
                                         dashArray: [5, 5],
-                                        color: Theme.of(context).colorScheme.secondary.withOpacity(0.5),
+                                        color: Colors.orange.withOpacity(0.7),
                                         barWidth: 2,
                                         dotData: const FlDotData(show: false),
                                       ),
@@ -424,7 +457,7 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                                       ? totalMonthlyBudget 
                                       : [
                                           ...last13MonthsTotals,
-                                          totalMonthlyBudget
+                                          ..._historicalBudgets,
                                         ].reduce((a, b) => a > b ? a : b);
                                   final double maxY = rawMaxY == 0 ? 1000 : rawMaxY * 1.3;
 
@@ -500,11 +533,75 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                             },
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildLegendItem(
+                              context,
+                              color: Theme.of(context).colorScheme.primary,
+                              label: 'Expenses',
+                              isDashed: false,
+                            ),
+                            const SizedBox(width: 24),
+                            _buildLegendItem(
+                              context,
+                              color: Colors.orange.withOpacity(0.7),
+                              label: 'Budget',
+                              isDashed: true,
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 100),
                       ],
                     ),
                   ),
 
+    );
+  }
+
+  Widget _buildLegendItem(BuildContext context,
+      {required Color color, required String label, required bool isDashed}) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 2,
+          decoration: BoxDecoration(
+            color: isDashed ? null : color,
+            border: isDashed
+                ? Border(
+                    bottom: BorderSide(
+                      color: color,
+                      width: 2,
+                      style: BorderStyle.solid,
+                    ),
+                  )
+                : null,
+          ),
+          child: isDashed
+              ? Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(
+                      3,
+                      (index) => Container(
+                            width: 3,
+                            height: 2,
+                            color: color,
+                          )),
+                )
+              : null,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      ],
     );
   }
 
