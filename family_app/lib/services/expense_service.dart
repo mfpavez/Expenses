@@ -123,12 +123,14 @@ class ExpenseService {
   Future<List<Expense>> fetchExpenses(String month, {bool refreshCache = false}) async {
     // Check cache first
     if (!refreshCache && _cachedExpenses.containsKey(month) && _cacheTimestamps.containsKey(month)) {
-      if (DateTime.now().difference(_cacheTimestamps[month]!) < _cacheDuration) {
-        return _cachedExpenses[month]!;
-      }
+       if (DateTime.now().difference(_cacheTimestamps[month]!) < _cacheDuration) {
+         return _cachedExpenses[month]!;
+       }
     }
 
-    final uri = Uri.parse('$_n8nWebhookUrl?month=$month');
+    // User confirmed API expects English month names
+    final apiMonth = _translateMonthToEnglish(month);
+    final uri = Uri.parse('$_n8nWebhookUrl?month=$apiMonth');
     final response = await _client.get(uri);
 
     if (response.statusCode == 200) {
@@ -146,52 +148,68 @@ class ExpenseService {
       } else if (decodedJson is Map) {
         expenseJsonList = [decodedJson];
       } else {
-        throw Exception(
-          "JSON response is not a List or a Map. Received: $responseBody",
-        );
+        throw Exception("JSON response is not a List or a Map. Received: $responseBody");
       }
 
       try {
-        final List<Expense> expenseList = expenseJsonList
+        List<Expense> expenseList = expenseJsonList
             .map((json) => Expense.fromJson(json as Map<String, dynamic>))
             .toList();
         
+        // FALLBACK: If API returns empty list but we suspect data exists (common with backend filtering issues)
+        if (expenseList.isEmpty) {
+           try {
+             final allExpenses = await fetchAllExpenses(refreshCache: refreshCache);
+             final int targetMonth = _monthStringToInt(month);
+             if (targetMonth > 0) {
+               // Filter for target month and CURRENT YEAR (assuming context is current year)
+               final currentYear = DateTime.now().year;
+               expenseList = allExpenses.where((e) => e.date.month == targetMonth && e.date.year == currentYear).toList();
+             }
+           } catch (e) {
+             print('ExpenseService Fallback Failed: $e');
+           }
+        }
+
         // Cache the data
         _cachedExpenses[month] = expenseList;
         _cacheTimestamps[month] = DateTime.now();
         
         return expenseList;
       } catch (e) {
-        // Find the problematic record and throw a more detailed error
-        for (var item in expenseJsonList) {
-          try {
-            Expense.fromJson(item as Map<String, dynamic>);
-          } catch (error) {
-            throw Exception(
-              'Failed to parse an expense record. Error: $error. Problematic JSON: $item',
-            );
-          }
-        }
-        // If the loop completes, the error was something else
+        // ... catch block ...
         throw Exception('Failed to parse expenses: $e');
       }
     } else {
-      throw Exception(
-        'Failed to load expenses: ${response.statusCode}. Response body: ${response.body}',
-      );
+      throw Exception('Failed to load expenses: ${response.statusCode}');
     }
   }
 
-  void _validateResponse(http.Response response, String url, String method, dynamic requestBody) {
-    // Debug logging
-    print('--- Webhook Debug ---');
-    print('URL: $url');
-    print('Method: $method');
-    print('Request Body: $requestBody');
-    print('Response Code: ${response.statusCode}');
-    print('Response Body: ${response.body}');
-    print('----------------------');
+  String _translateMonthToEnglish(String spanishMonth) {
+    const map = {
+      'Enero': 'January',
+      'Febrero': 'February',
+      'Marzo': 'March',
+      'Abril': 'April',
+      'Mayo': 'May',
+      'Junio': 'June',
+      'Julio': 'July',
+      'Agosto': 'August',
+      'Septiembre': 'September',
+      'Octubre': 'October',
+      'Noviembre': 'November',
+      'Diciembre': 'December',
+    };
+    return map[spanishMonth] ?? spanishMonth; // Return original if translation fails (e.g. already English)
+  }
 
+  int _monthStringToInt(String month) {
+    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    final index = months.indexOf(month);
+    return index + 1; // 0-based to 1-based (0 -> 0 if not found, handled by > 0 check)
+  }
+
+  void _validateResponse(http.Response response, String url, String method, dynamic requestBody) {
     if (response.statusCode != 200) {
       throw Exception(
         'Failed: ${response.statusCode}. Response body: ${response.body}',

@@ -55,7 +55,12 @@ class HomePageState extends State<HomePage>
     );
 
     if (!_isDataLoaded) {
-      _currentMonth = DateFormat('MMMM').format(DateTime.now());
+      // Use hardcoded Spanish month names to avoid locale initialization issues
+      const monthNames = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+      ];
+      _currentMonth = monthNames[DateTime.now().month - 1];
       fetchCurrentMonthExpenses(refreshCache: false);
     }
   }
