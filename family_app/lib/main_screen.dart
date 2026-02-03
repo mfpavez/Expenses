@@ -108,23 +108,26 @@ class _MainScreenState extends State<MainScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (int page) {
-          setState(() {
-            _currentPage = page;
-          });
-          if (page == 0) {
-            _homePageKey.currentState?.animateChart();
-          } else if (page == 1) {
-            _balancePageKey.currentState?.animateChart();
-          }
-        },
-        children: [
-          HomePage(key: _homePageKey),
-          BalancePage(key: _balancePageKey),
-          BudgetConfigPage(key: _budgetPageKey),
-        ],
+      body: SafeArea(
+        top: false, // AppBar handles top
+        child: PageView(
+          controller: _pageController,
+          onPageChanged: (int page) {
+            setState(() {
+              _currentPage = page;
+            });
+            if (page == 0) {
+              _homePageKey.currentState?.animateChart();
+            } else if (page == 1) {
+              _balancePageKey.currentState?.animateChart();
+            }
+          },
+          children: [
+            HomePage(key: _homePageKey),
+            BalancePage(key: _balancePageKey),
+            BudgetConfigPage(key: _budgetPageKey),
+          ],
+        ),
       ),
     );
   }

@@ -89,8 +89,22 @@ class HomePageState extends State<HomePage>
       ]);
 
       setState(() {
-        _expenses = results[0] as List<Expense>;
-        _categoryBudgets = results[1] as Map<Category, double>;
+        _expenses = (results[0] as List<Expense>?) ?? [];
+        final dynamic rawBudgets = results[1];
+        if (rawBudgets is Map) {
+          try {
+             _categoryBudgets = Map<Category, double>.from(
+               (rawBudgets[_currentMonth] as Map? ?? {}).map((key, value) => MapEntry(
+                 key is Category ? key : categoryFromString(key.toString()),
+                 double.tryParse(value.toString()) ?? 0.0,
+               )),
+             );
+          } catch (e) {
+            _categoryBudgets = {};
+          }
+        } else {
+          _categoryBudgets = {};
+        }
         _isDataLoaded = true;
         _expenses.sort((a, b) {
           final bool aIsDefaultDate = a.date.year == 2020;
@@ -499,6 +513,7 @@ class HomePageState extends State<HomePage>
             ),
           ),
           trailing: Column(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -702,10 +717,11 @@ class HomePageState extends State<HomePage>
     categorySummary.forEach((categoryName, amount) {
       final percentage = (amount / total) * 100;
       final color = _getCategoryColor(categoryName == 'Others' ? 'Others' : categoryFromString(categoryName));
+      final int flex = percentage.toInt() > 0 ? percentage.toInt() : 1;
       
       bars.add(
         Expanded(
-          flex: percentage.toInt(),
+          flex: flex,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 1.0),
             child: Card(

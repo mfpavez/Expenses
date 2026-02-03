@@ -13,10 +13,11 @@ class ExpenseService {
 
   // Caching mechanism
   final Map<String, List<Expense>> _cachedExpenses = {};
-  final Map<String, Map<Category, double>> _cachedBudget = {};
+  final Map<String, Map<String, Map<Category, double>>> _cachedBudget = {}; // CacheKey -> Month -> CategoryMap
   final Map<String, DateTime> _cacheTimestamps = {};
   final Duration _cacheDuration = const Duration(minutes: 5); // Cache for 5 minutes
 
+  // ... (URL definitions) ...
   final String _n8nWebhookUrl =
       'https://www.pxghub.com/webhook/gastos';
   final String _n8nAddWebhookUrl =
@@ -30,12 +31,12 @@ class ExpenseService {
   final String _n8nUpdateBudgetWebhookUrl = 
       'https://www.pxghub.com/webhook/modify-budget';
 
-  Future<Map<Category, double>> fetchBudget({bool refreshCache = false}) async {
+  Future<Map<String, Map<Category, double>>> fetchBudget({bool refreshCache = false}) async {
     const cacheKey = 'budget';
-    // Match the exact caching pattern from fetchExpenses
     if (!refreshCache && _cachedBudget.containsKey(cacheKey) && _cacheTimestamps.containsKey(cacheKey)) {
       if (DateTime.now().difference(_cacheTimestamps[cacheKey]!) < _cacheDuration) {
-        return _cachedBudget[cacheKey]!;
+        final cached = _cachedBudget[cacheKey];
+        if (cached != null) return cached;
       }
     }
 
@@ -45,8 +46,7 @@ class ExpenseService {
     print('--- Budget Webhook Debug ---');
     print('URL: $uri');
     print('Status: ${response.statusCode}');
-    print('Body: ${response.body}');
-
+    
     if (response.statusCode == 200) {
       final dynamic decodedJson;
       try {
@@ -64,44 +64,58 @@ class ExpenseService {
         throw Exception("Unexpected JSON format for budget");
       }
 
-      final Map<Category, double> budgetMap = {};
+      // Structure: Month -> Category -> Amount
+      final Map<String, Map<Category, double>> monthlyBudgets = {};
+      
       for (var item in budgetList) {
         // Log individual item for deeper debugging
-        print('Parsing item: $item');
+        // print('Parsing item: $item');
         
-        // Handle potential key variations (n8n often uses Title Case or lowercase)
         final String? categoryStr = (item['category'] ?? item['Category'] ?? item['CATEGORIA']) as String?;
         final category = categoryFromString(categoryStr);
         
-        // Budget amount might be 'budget', 'Budget', or 'Presupuesto'
+        // Budget amount
         final rawBudget = item['budget'] ?? item['Budget'] ?? item['presupuesto'];
         final amount = double.tryParse(rawBudget.toString()) ?? 0.0;
         
-        if (category != Category.undefined) {
-          budgetMap[category] = amount;
-          print('Assigned $category: $amount');
+        // Month key
+        final String monthKey = (item['month'] ?? item['Month'] ?? item['MES'] ?? 'Default').toString();
+        
+        if (!monthlyBudgets.containsKey(monthKey)) {
+          monthlyBudgets[monthKey] = {};
         }
+        monthlyBudgets[monthKey]![category] = amount;
       }
 
+      print('--- Detailed Budget Debug ---');
+      monthlyBudgets.forEach((month, budgets) {
+        print('Month: $month, Entries: ${budgets.length}');
+        budgets.forEach((cat, amt) {
+          print('  ${cat.name}: $amt');
+        });
+      });
+      print('---------------------------');
+
       // Cache the data
-      _cachedBudget[cacheKey] = budgetMap;
+      _cachedBudget[cacheKey] = monthlyBudgets;
       _cacheTimestamps[cacheKey] = DateTime.now();
       
-      print('Final Budget Map: $budgetMap');
+      print('Parsed Monthly Budgets Keys: ${monthlyBudgets.keys.toList()}');
       print('---------------------------');
-      return budgetMap;
+      return monthlyBudgets;
     } else {
       throw Exception('Failed to load budget: ${response.statusCode}');
     }
   }
 
-  Future<void> updateBudget(Map<Category, double> budget) async {
+  Future<void> updateBudget(Map<Category, double> budget, {required String month}) async {
     final uri = Uri.parse(_n8nUpdateBudgetWebhookUrl);
     
     // Create a list of objects for easy iteration in n8n
     final List<Map<String, dynamic>> body = budget.entries.map((e) => {
       'category': e.key.name,
       'budget': e.value,
+      'month': month, // Added month to signal n8n which month to update
     }).toList();
 
     final response = await _client.post(

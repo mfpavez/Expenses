@@ -22,13 +22,19 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
 
   final ExpenseService _expenseService = ExpenseService();
   List<Expense> _allTimeExpenses = [];
-  Map<Category, double> _categoryBudgets = {};
+  Map<String, Map<Category, double>> _allMonthlyBudgets = {};
+  Map<Category, double> _currentMonthBudget = {};
   bool _isLoading = true;
   String? _error;
 
   String _currentMonthName = '';
   String _previousMonth1Name = '';
   String _previousMonth2Name = '';
+  final List<String> _monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+
   bool _isDataLoaded = false;
   bool _isAddingPayout = false;
 
@@ -55,9 +61,10 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
 
     if (!_isDataLoaded) {
       final now = DateTime.now();
-      _currentMonthName = DateFormat('MMMM').format(now);
-      _previousMonth1Name = DateFormat('MMMM').format(DateTime(now.year, now.month - 1));
-      _previousMonth2Name = DateFormat('MMMM').format(DateTime(now.year, now.month - 2));
+      _currentMonthName = _monthNames[now.month - 1]; 
+      _previousMonth1Name = _monthNames[DateTime(now.year, now.month - 1).month - 1];
+      _previousMonth2Name = _monthNames[DateTime(now.year, now.month - 2).month - 1];
+      
       _fetchAllData();
     }
   }
@@ -69,9 +76,8 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   }
 
   void animateChart() {
-    debugPrint('animateChart triggered');
     if (mounted) {
-      _chartAnimationController.forward(from: 0.0);
+      _chartAnimationController.forward(from: 0);
     }
   }
 
@@ -88,8 +94,31 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
       ]);
 
       setState(() {
-        _allTimeExpenses = results[0] as List<Expense>;
-        _categoryBudgets = results[1] as Map<Category, double>;
+        _allTimeExpenses = (results[0] as List<Expense>?) ?? [];
+        final dynamic rawBudgets = results[1];
+        if (rawBudgets is Map) {
+          try {
+            _allMonthlyBudgets = Map<String, Map<Category, double>>.from(
+              rawBudgets.map((key, value) => MapEntry(
+                key.toString(),
+                Map<Category, double>.from(
+                  (value as Map).map((k, v) => MapEntry(
+                    k is Category ? k : categoryFromString(k.toString()),
+                    double.tryParse(v.toString()) ?? 0.0,
+                  )),
+                ),
+              )),
+            );
+            _currentMonthBudget = _allMonthlyBudgets[_currentMonthName] ?? {};
+          } catch (e) {
+            _allMonthlyBudgets = {};
+            _currentMonthBudget = {};
+          }
+        } else {
+          _allMonthlyBudgets = {};
+          _currentMonthBudget = {};
+        }
+
         _isDataLoaded = true;
         _isLoading = false;
       });
@@ -101,6 +130,8 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
       });
     }
   }
+  
+  // Removed _updateDisplayedData as it was for the dropdown filter.
 
   Future<void> fetchExpenses({bool refresh = false}) async {
     await _fetchAllData(refresh: refresh);
@@ -121,11 +152,13 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
   Map<String, List<Expense>> _groupExpensesByMonth(List<Expense> expenses) {
     final Map<String, List<Expense>> grouped = {};
     for (final expense in expenses) {
-      final month = DateFormat('MMMM').format(expense.date);
-      if (grouped[month] == null) {
-        grouped[month] = [];
+      if (expense.date.month >= 1 && expense.date.month <= 12) {
+        final month = _monthNames[expense.date.month - 1];
+        if (grouped[month] == null) {
+          grouped[month] = [];
+        }
+        grouped[month]!.add(expense);
       }
-      grouped[month]!.add(expense);
     }
     return grouped;
   }
@@ -198,20 +231,51 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     return totals;
   }
 
+  List<double> _getLast13MonthsBudgets() {
+    final now = DateTime.now();
+    final List<double> budgets = [];
+
+    for (int i = 12; i >= 0; i--) {
+      final targetDate = DateTime(now.year, now.month - i);
+      final monthName = _monthNames[targetDate.month - 1];
+      final budgetMap = _allMonthlyBudgets[monthName] ?? {};
+      final totalBudget = budgetMap.values.fold(0.0, (sum, val) => sum + val);
+      budgets.add(totalBudget);
+    }
+    return budgets;
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final groupedExpenses = _groupExpensesByMonth(_allTimeExpenses);
+    
+    // Use selected month for the main display instead of just "_currentMonthName"
+    // But wait, the UI layout shows 3 months: Current, Prev1, Prev2.
+    // The user asked for a "Filter". Usually means "Show me data for THIS month".
+    // Does the user want to replace the 3-card layout with a single filtered view?
+    // "agrega un filtro a la pantalla budget para poder filtrar por mes. preselecciona el mes en curso."
+    // This implies a single view that changes based on filter.
+    // I will keep the layout but maybe focus on the selected month?
+    // Or I'll replace the "Current Month" card with the "Selected Month" data.
+    // Actually, "BalancePage" shows specific months. 
+    // I will replace the "Current, Prev1, Prev2" static list with a dynamic view driven by the filter?
+    // Let's assume the user wants to see the breakdown for the SELECTED month.
+    // So I will hide the Prev1/Prev2 cards and just show the Selected Month.
+    // Or, I will keep the timeline but let the filter control the *main* view?
+    // Simplest interpretation: Replace the 3 cards with ONE card that reacts to the dropdown.
+    
     final currentMonthExpenses = groupedExpenses[_currentMonthName] ?? [];
-    final previousMonth1Expenses = groupedExpenses[_previousMonth1Name] ?? [];
-    final previousMonth2Expenses = groupedExpenses[_previousMonth2Name] ?? [];
-    final last13MonthsTotals = _getLast13MonthsTotals(_allTimeExpenses);
+    final prev1MonthExpenses = groupedExpenses[_previousMonth1Name] ?? [];
+    final prev2MonthExpenses = groupedExpenses[_previousMonth2Name] ?? [];
 
+     final last13MonthsTotals = _getLast13MonthsTotals(_allTimeExpenses);
+    final last13MonthsBudgets = _getLast13MonthsBudgets();
     final List<String> monthLabels = [];
     final now = DateTime.now();
     for (int i = 12; i >= 0; i--) {
-      final targetDate = DateTime(now.year, now.month - i);
-      monthLabels.add(DateFormat('MMM').format(targetDate)[0]);
+       final targetDate = DateTime(now.year, now.month - i);
+       monthLabels.add(_monthNames[targetDate.month - 1][0]); 
     }
 
     return Scaffold(
@@ -231,66 +295,14 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                     const SizedBox(height: 16),
                     _buildUnifiedBalanceCard(_allTimeExpenses),
                     const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
-                        child: _isLoading 
-                          ? _buildTitlePlaceholder(key: const ValueKey('t1'))
-                          : Text(
-                              '$_currentMonthName: ${_currencyFormat.format(_calculateTotal(currentMonthExpenses))}',
-                              key: const ValueKey('v1'),
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                      ),
-                    ),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 500),
-                      child: _isLoading 
-                        ? _buildChartPlaceholder(key: const ValueKey('c1'))
-                        : _buildCategorySummaryChart(currentMonthExpenses),
-                    ),
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
-                        child: _isLoading
-                          ? _buildTitlePlaceholder(key: const ValueKey('t2'))
-                          : Text(
-                              '$_previousMonth1Name: ${_currencyFormat.format(_calculateTotal(previousMonth1Expenses))}',
-                              key: const ValueKey('v2'),
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                      ),
-                    ),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 500),
-                      child: _isLoading
-                        ? _buildChartPlaceholder(key: const ValueKey('c2'))
-                        : _buildCategorySummaryChart(previousMonth1Expenses),
-                    ),
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
-                        child: _isLoading
-                          ? _buildTitlePlaceholder(key: const ValueKey('t3'))
-                          : Text(
-                              '$_previousMonth2Name: ${_currencyFormat.format(_calculateTotal(previousMonth2Expenses))}',
-                              key: const ValueKey('v3'),
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                      ),
-                    ),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 500),
-                      child: _isLoading
-                        ? _buildChartPlaceholder(key: const ValueKey('c3'))
-                        : _buildCategorySummaryChart(previousMonth2Expenses),
-                    ),
+                    
+                    _buildMonthSummaryCard(_currentMonthName, currentMonthExpenses, _allMonthlyBudgets[_currentMonthName] ?? {}),
+                    _buildMonthSummaryCard(_previousMonth1Name, prev1MonthExpenses, _allMonthlyBudgets[_previousMonth1Name] ?? {}),
+                    _buildMonthSummaryCard(_previousMonth2Name, prev2MonthExpenses, _allMonthlyBudgets[_previousMonth2Name] ?? {}),
+                    
                     const SizedBox(height: 40),
+                    // ... (History Chart) ...
+
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16.0),
                       child: Text(
@@ -310,7 +322,9 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                             builder: (context, child) {
                               return LayoutBuilder(
                                 builder: (context, constraints) {
-                                  final totalMonthlyBudget = _categoryBudgets.values.fold(0.0, (sum, val) => sum + val);
+                                  // Find the max budget across the 13 months for a safe maxY
+                                  final maxBudget = last13MonthsBudgets.isEmpty ? 0.0 : last13MonthsBudgets.reduce((a, b) => a > b ? a : b);
+
 
                                   final lineBarsData = [
                                     // Main Expenses Line
@@ -331,13 +345,15 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                                         color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                                       ),
                                     ),
-                                    // Budget Reference Line
-                                    if (totalMonthlyBudget > 0)
+                                    // Budget Reference Line (Historical)
+                                    if (maxBudget > 0)
                                       LineChartBarData(
-                                        spots: List.generate(
-                                          last13MonthsTotals.length,
-                                          (i) => FlSpot(i.toDouble(), totalMonthlyBudget * _chartAnimation.value),
-                                        ),
+                                        spots: last13MonthsBudgets
+                                            .asMap()
+                                            .entries
+                                            .map((e) =>
+                                                FlSpot(e.key.toDouble(), e.value * _chartAnimation.value))
+                                            .toList(),
                                         dashArray: [5, 5],
                                         color: Theme.of(context).colorScheme.secondary.withOpacity(0.5),
                                         barWidth: 2,
@@ -358,10 +374,10 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
                                   }).expand((i) => i).toList();
 
                                   final double rawMaxY = last13MonthsTotals.isEmpty 
-                                      ? totalMonthlyBudget 
+                                      ? maxBudget 
                                       : [
                                           ...last13MonthsTotals,
-                                          totalMonthlyBudget
+                                          ...last13MonthsBudgets
                                         ].reduce((a, b) => a > b ? a : b);
                                   final double maxY = rawMaxY == 0 ? 1000 : rawMaxY * 1.3;
 
@@ -445,6 +461,80 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     );
   }
 
+  Widget _buildMonthSummaryCard(String monthName, List<Expense> expenses, Map<Category, double> budget) {
+    final double totalBudget = budget.values.fold(0.0, (sum, val) => sum + val);
+    final double totalExpenses = _calculateTotal(expenses);
+    final double remaining = totalBudget - totalExpenses;
+    final bool isOverBudget = totalBudget > 0 && remaining < 0;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            child: _isLoading 
+              ? _buildTitlePlaceholder(key: ValueKey('title_$monthName'))
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '$monthName Expenses',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        _AnimatedNumber(
+                          value: totalExpenses,
+                          formatter: (val) => _currencyFormat.format(val),
+                          style: TextStyle(
+                            fontSize: 18, 
+                            fontWeight: FontWeight.w900,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (totalBudget > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isOverBudget ? 'Over Budget' : 'Remaining Budget',
+                            style: TextStyle(
+                              fontSize: 12, 
+                              color: isOverBudget ? Colors.red : Colors.green,
+                              fontWeight: FontWeight.bold
+                            ),
+                          ),
+                          Text(
+                            _currencyFormat.format(remaining.abs()),
+                            style: TextStyle(
+                              fontSize: 12, 
+                              color: isOverBudget ? Colors.red : Colors.green,
+                              fontWeight: FontWeight.bold
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+          ),
+        ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 500),
+          child: _isLoading 
+            ? _buildChartPlaceholder(key: ValueKey('chart_$monthName'))
+            : _buildCategorySummaryChart(expenses),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
   Widget _buildTitlePlaceholder({Key? key}) {
     return Container(
       key: key,
@@ -503,11 +593,12 @@ class BalancePageState extends State<BalancePage> with AutomaticKeepAliveClientM
     List<Widget> bars = [];
     categorySummary.forEach((categoryName, amount) {
       final percentage = (amount / total) * 100;
+      final int flex = percentage.toInt() > 0 ? percentage.toInt() : 1;
       final color = _getCategoryColor(categoryName == 'Others' ? 'Others' : categoryFromString(categoryName));
 
       bars.add(
         Expanded(
-          flex: percentage.toInt(),
+          flex: flex,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 1.0),
             child: Card(

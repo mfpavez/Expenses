@@ -16,6 +16,13 @@ class BudgetConfigPageState extends State<BudgetConfigPage> with AutomaticKeepAl
   bool get wantKeepAlive => true;
 
   final ExpenseService _expenseService = ExpenseService();
+  Map<String, Map<Category, double>> _allMonthlyBudgets = {};
+  String _selectedMonth = '';
+  final List<String> _monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+
   final Map<Category, TextEditingController> _controllers = {};
   double _totalBudget = 0.0;
   bool _isLoading = true;
@@ -30,6 +37,7 @@ class BudgetConfigPageState extends State<BudgetConfigPage> with AutomaticKeepAl
   @override
   void initState() {
     super.initState();
+    _selectedMonth = _monthNames[DateTime.now().month - 1]; // Initialize with current Spanish month
     _initializeControllers();
     loadBudgetData();
   }
@@ -51,9 +59,16 @@ class BudgetConfigPageState extends State<BudgetConfigPage> with AutomaticKeepAl
   }
 
   Future<void> loadBudgetData({bool refreshCache = false}) async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final budget = await _expenseService.fetchBudget(refreshCache: refreshCache);
+      _allMonthlyBudgets = await _expenseService.fetchBudget(refreshCache: refreshCache);
+      
+      final budget = _allMonthlyBudgets[_selectedMonth] ?? {};
+      
+      // Clear current controllers first if month changed
+      _controllers.forEach((_, c) => c.text = '0');
+      
       budget.forEach((category, amount) {
         if (_controllers.containsKey(category)) {
           _controllers[category]!.text = amount.toStringAsFixed(0);
@@ -78,10 +93,10 @@ class BudgetConfigPageState extends State<BudgetConfigPage> with AutomaticKeepAl
       _controllers.forEach((category, controller) {
         final val = double.tryParse(controller.text) ?? 0.0;
         budgetToSave[category] = val;
-        debugPrint('Preparing to save $category: $val');
+        debugPrint('Preparing to save $category for $_selectedMonth: $val');
       });
 
-      await _expenseService.updateBudget(budgetToSave);
+      await _expenseService.updateBudget(budgetToSave, month: _selectedMonth);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -127,6 +142,63 @@ class BudgetConfigPageState extends State<BudgetConfigPage> with AutomaticKeepAl
           ? Center(child: SpinKitRotatingPlain(color: Theme.of(context).colorScheme.primary, size: 50.0))
           : Column(
               children: [
+                // MONTH FILTER - Horizontal Selectable List
+                SizedBox(
+                  height: 60,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: _monthNames.length,
+                    itemBuilder: (context, index) {
+                      final month = _monthNames[index];
+                      final isSelected = month == _selectedMonth;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedMonth = month;
+                              final budget = _allMonthlyBudgets[_selectedMonth] ?? {};
+                              _controllers.forEach((_, c) => c.text = '0');
+                              budget.forEach((category, amount) {
+                                if (_controllers.containsKey(category)) {
+                                  _controllers[category]!.text = amount.toStringAsFixed(0);
+                                }
+                              });
+                              _calculateTotal();
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isSelected 
+                                  ? Theme.of(context).colorScheme.primary 
+                                  : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: isSelected ? [
+                                BoxShadow(
+                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                )
+                              ] : null,
+                            ),
+                            child: Center(
+                              child: Text(
+                                month,
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface,
+                                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
                 // Total Budget Summary Card
                 Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -238,7 +310,7 @@ class BudgetConfigPageState extends State<BudgetConfigPage> with AutomaticKeepAl
                         context: context,
                         builder: (context) => AlertDialog(
                           title: const Text('Confirm Budget Update'),
-                          content: Text('Are you sure you want to update the monthly budget to ${_currencyFormat.format(_totalBudget)}?'),
+                          content: Text('Are you sure you want to update the budget for $_selectedMonth to ${_currencyFormat.format(_totalBudget)}?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
